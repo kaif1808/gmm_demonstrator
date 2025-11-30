@@ -35,8 +35,14 @@ def generate_data(K, L, n, seed, delta_true=None, dgp_type="Homoskedastic", hete
         delta_true = np.random.randn(L)
 
     # ε_i
-    if dgp_type == "Heteroskedastic":
+    if dgp_type == "Heteroskedastic (Linear)":
+        var_eps = hetero_level * (1 + np.abs(x[:, 0]))
+        eps = np.random.normal(0, np.sqrt(var_eps), n)
+    elif dgp_type == "Heteroskedastic (Quadratic)":
         var_eps = hetero_level * (1 + x[:, 0]**2)
+        eps = np.random.normal(0, np.sqrt(var_eps), n)
+    elif dgp_type == "Heteroskedastic (Exponential)":
+        var_eps = hetero_level * np.exp(np.abs(x[:, 0]))
         eps = np.random.normal(0, np.sqrt(var_eps), n)
     else:
         eps = np.random.normal(0, 0.1, n)
@@ -100,9 +106,9 @@ L = st.sidebar.slider("L (number of endogenous variables)", 1, 10, 1)
 n = st.sidebar.slider("n (sample size)", 100, 10000, 1000)
 seed = st.sidebar.number_input("Seed", value=42, min_value=0)
 M = st.sidebar.slider("M (number of simulations)", 100, 5000, 1000)
-dgp_type = st.sidebar.selectbox("Data Generating Process", ["Homoskedastic", "Heteroskedastic", "High Endogeneity", "Low Endogeneity"])
+dgp_type = st.sidebar.selectbox("Data Generating Process", ["Homoskedastic", "Heteroskedastic (Linear)", "Heteroskedastic (Quadratic)", "Heteroskedastic (Exponential)", "High Endogeneity", "Low Endogeneity"])
 
-if dgp_type == "Heteroskedastic":
+if "Heteroskedastic" in dgp_type:
     hetero_level = st.sidebar.slider("Heteroskedasticity Level", 0.0, 1.0, 0.1, 0.01)
 else:
     hetero_level = 0.0
@@ -457,19 +463,46 @@ if x is not None:
             else:
                 asym_se_2 = np.full(L, np.nan)
 
-            # Comparison table
-            st.subheader("Comparison of 1-Step vs 2-Step GMM")
-            comparison_data = []
+            # 1-Step GMM Results Table
+            st.subheader("1-Step GMM Results")
+            one_step_data = []
             for j in range(L):
-                comparison_data.append({
+                one_step_data.append({
                     "Parameter": f"δ_{j+1}",
                     "True Value": delta_true[j],
-                    "1-Step Bias": bias_1[j],
-                    "1-Step SE (Emp)": se_1[j],
-                    "1-Step SE (Asym)": asym_se_1[j],
-                    "2-Step Bias": bias_2[j],
-                    "2-Step SE (Emp)": se_2[j],
-                    "2-Step SE (Asym)": asym_se_2[j]
+                    "Bias": bias_1[j],
+                    "SE (Emp)": se_1[j],
+                    "SE (Asym)": asym_se_1[j]
+                })
+            df_one_step = pd.DataFrame(one_step_data)
+            st.dataframe(df_one_step)
+
+            # 2-Step GMM Results Table
+            st.subheader("2-Step GMM Results")
+            two_step_data = []
+            for j in range(L):
+                two_step_data.append({
+                    "Parameter": f"δ_{j+1}",
+                    "True Value": delta_true[j],
+                    "Bias": bias_2[j],
+                    "SE (Emp)": se_2[j],
+                    "SE (Asym)": asym_se_2[j]
+                })
+            df_two_step = pd.DataFrame(two_step_data)
+            st.dataframe(df_two_step)
+
+            # Direct Comparison Table
+            st.subheader("Direct Comparison: Bias and Efficiency")
+            comparison_data = []
+            for j in range(L):
+                bias_diff = bias_2[j] - bias_1[j]
+                eff_gain_emp = se_1[j] / se_2[j] if se_2[j] != 0 else np.nan
+                eff_gain_asym = asym_se_1[j] / asym_se_2[j] if asym_se_2[j] != 0 else np.nan
+                comparison_data.append({
+                    "Parameter": f"δ_{j+1}",
+                    "Bias Difference (2-Step - 1-Step)": bias_diff,
+                    "Efficiency Gain (Emp) (SE_1 / SE_2)": eff_gain_emp,
+                    "Efficiency Gain (Asym) (SE_1 / SE_2)": eff_gain_asym
                 })
             df_comparison = pd.DataFrame(comparison_data)
             st.dataframe(df_comparison)
