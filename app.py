@@ -233,6 +233,12 @@ if x is not None:
             st.subheader("g_n(δ̂¹)")
             st.latex(matrix_to_latex(g_n, r"\mathbf{g}_n(\hat{\delta}^1)"))
 
+            # Compute intermediates for numerical display
+            S_xx_inv = np.linalg.inv(S_xx)
+            temp_1step = S_xz.T @ S_xx_inv @ S_xz
+            temp_1step_inv = np.linalg.inv(temp_1step)
+            inner_1step = S_xz.T @ S_xx_inv @ S_xy
+
             # Expanders
             with st.expander("Formulas and Derivations"):
                 st.markdown("**Moment Conditions:**")
@@ -247,6 +253,20 @@ if x is not None:
                 st.latex(r"\hat{\epsilon}_i = y_i - z_i' \hat{\delta}^1")
                 st.markdown("**g_n(δ):**")
                 st.latex(r"\mathbf{g}_n(\delta) = \frac{1}{n} \sum x_i (y_i - z_i' \delta)")
+
+                st.markdown("**Numerical Calculations:**")
+                st.markdown("**Sample Moments:**")
+                st.latex(matrix_to_latex(S_xx, r"\mathbf{S}_{xx}"))
+                st.latex(matrix_to_latex(S_xz, r"\mathbf{S}_{xz}"))
+                st.latex(matrix_to_latex(S_xy, r"\mathbf{S}_{xy}"))
+                st.markdown("**1-Step GMM Estimator Computation:**")
+                st.latex(rf"\mathbf{{S}}_{{xx}}^{{-1}} = {matrix_to_latex(S_xx_inv, '')}")
+                st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xz}} = {matrix_to_latex(temp_1step, '')}")
+                st.latex(rf"(\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xz}})^{{-1}} = {matrix_to_latex(temp_1step_inv, '')}")
+                st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xy}} = {matrix_to_latex(inner_1step, '')}")
+                st.latex(rf"\hat{{\delta}}^1 = {matrix_to_latex(delta_hat, '')}")
+                st.markdown("**g_n(δ̂¹):**")
+                st.latex(rf"\mathbf{{g}}_n(\hat{{\delta}}^1) = {matrix_to_latex(g_n, '')}")
 
             with st.expander("Explanations"):
                 st.markdown("The 1-step GMM estimator uses the identity matrix as the weighting matrix (W = I).")
@@ -299,6 +319,13 @@ if x is not None:
             if inversion_success:
                 st.latex(matrix_to_latex(W2, r"\mathbf{W}_2"))
 
+            # Compute intermediates for 2-step numerical display
+            if inversion_success:
+                temp_2step = S_xz.T @ W2 @ S_xz
+                temp_2step_inv = np.linalg.inv(temp_2step)
+                inner_2step = S_xz.T @ W2 @ S_xy
+                J2_computed = n * (g_n_2.T @ W2 @ g_n_2)
+
             # Expanders for 2-step
             with st.expander("Formulas and Derivations (2-Step)"):
                 st.markdown("**Ŝ:**")
@@ -309,6 +336,20 @@ if x is not None:
                 st.latex(r"\hat{\delta}^2 = (\mathbf{S}_{xz}' \mathbf{W}_2 \mathbf{S}_{xz})^{-1} \mathbf{S}_{xz}' \mathbf{W}_2 \mathbf{S}_{xy}")
                 st.markdown("**J² Statistic:**")
                 st.latex(r"J^2 = n \mathbf{g}_n(\hat{\delta}^2)' \mathbf{W}_2 \mathbf{g}_n(\hat{\delta}^2)")
+
+                if inversion_success:
+                    st.markdown("**Numerical Calculations:**")
+                    st.latex(matrix_to_latex(S_hat, r"\hat{\mathbf{S}}"))
+                    st.latex(matrix_to_latex(W2, r"\mathbf{W}_2"))
+                    st.markdown("**2-Step GMM Estimator Computation:**")
+                    st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{W}}_2 \mathbf{{S}}_{{xz}} = {matrix_to_latex(temp_2step, '')}")
+                    st.latex(rf"(\mathbf{{S}}_{{xz}}' \mathbf{{W}}_2 \mathbf{{S}}_{{xz}})^{{-1}} = {matrix_to_latex(temp_2step_inv, '')}")
+                    st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{W}}_2 \mathbf{{S}}_{{xy}} = {matrix_to_latex(inner_2step, '')}")
+                    st.latex(rf"\hat{{\delta}}^2 = {matrix_to_latex(delta_hat_2, '')}")
+                    st.markdown("**g_n(δ̂²):**")
+                    st.latex(rf"\mathbf{{g}}_n(\hat{{\delta}}^2) = {matrix_to_latex(g_n_2, '')}")
+                    st.markdown("**J² Statistic Computation:**")
+                    st.latex(rf"J^2 = {n} \times ({matrix_to_latex(g_n_2.T @ W2 @ g_n_2, '')}) = {J2:.4f}")
 
             with st.expander("Explanations (2-Step)"):
                 st.markdown("The 2-step GMM uses an optimal weighting matrix W₂ based on the residuals from the 1-step estimator.")
@@ -429,15 +470,13 @@ if x is not None:
                 })
             df_comparison = pd.DataFrame(comparison_data)
 
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("1-Step GMM Results")
-                df_1step = df_comparison[['Parameter', 'True Value', '1-Step Avg', '1-Step Bias', '1-Step SE (Emp)', '1-Step SE (Asym)']]
-                st.dataframe(df_1step)
-            with col2:
-                st.subheader("2-Step GMM Results")
-                df_2step = df_comparison[['Parameter', 'True Value', '2-Step Avg', '2-Step Bias', '2-Step SE (Emp)', '2-Step SE (Asym)']]
-                st.dataframe(df_2step)
+            st.subheader("1-Step GMM Results")
+            df_1step = df_comparison[['Parameter', 'True Value', '1-Step Avg', '1-Step Bias', '1-Step SE (Emp)', '1-Step SE (Asym)']]
+            st.dataframe(df_1step)
+
+            st.subheader("2-Step GMM Results")
+            df_2step = df_comparison[['Parameter', 'True Value', '2-Step Avg', '2-Step Bias', '2-Step SE (Emp)', '2-Step SE (Asym)']]
+            st.dataframe(df_2step)
 
             # Hansen J-Test
             st.subheader("Hansen J-Test")
