@@ -12,15 +12,9 @@ def generate_data(K, L, n, seed, delta_true=None):
     x = np.random.multivariate_normal(np.zeros(K), np.eye(K), n)
 
     # Generate Π: L x K matrix, random but full rank
-    # To ensure full rank, make it identity if K >= L, else something
-    if K >= L:
-        Pi = np.random.randn(L, K)
-        # Ensure full rank by making it have rank L
-        U, s, Vt = np.linalg.svd(Pi)
-        s[s < 1e-10] = 1e-10  # avoid zero singular values
-        Pi = U @ np.diag(s) @ Vt
-    else:
-        # If K < L, can't have full rank, but for simulation, perhaps set to have rank K
+    # Ensure full rank by regenerating if necessary
+    Pi = np.random.randn(L, K)
+    while np.linalg.matrix_rank(Pi) < min(L, K):
         Pi = np.random.randn(L, K)
 
     # Noise for z: v_i ~ N(0, 0.1 I_L)
