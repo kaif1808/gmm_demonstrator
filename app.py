@@ -3,9 +3,10 @@ import numpy as np
 import pandas as pd
 from io import StringIO
 import matplotlib.pyplot as plt
+import scipy.stats as stats
 from utils.gmm_calculations import *
 
-def generate_data(K, L, n, seed, delta_true=None):
+def generate_data(K, L, n, seed, delta_true=None, dgp_type="Homoskedastic"):
     np.random.seed(seed)
 
     # Generate x_i: multivariate normal, mean 0, covariance I_K
@@ -17,8 +18,14 @@ def generate_data(K, L, n, seed, delta_true=None):
     while np.linalg.matrix_rank(Pi) < min(L, K):
         Pi = np.random.randn(L, K)
 
-    # Noise for z: v_i ~ N(0, 0.1 I_L)
-    v = np.random.multivariate_normal(np.zeros(L), 0.1 * np.eye(L), n)
+    # Noise for z: v_i ~ N(0, sigma_v I_L)
+    if dgp_type == "High Endogeneity":
+        sigma_v = 0.01
+    elif dgp_type == "Low Endogeneity":
+        sigma_v = 1.0
+    else:
+        sigma_v = 0.1
+    v = np.random.multivariate_normal(np.zeros(L), sigma_v * np.eye(L), n)
 
     # z_i = Pi @ x_i + v_i
     z = x @ Pi.T + v
@@ -27,8 +34,12 @@ def generate_data(K, L, n, seed, delta_true=None):
     if delta_true is None:
         delta_true = np.random.randn(L)
 
-    # ε_i ~ N(0, 0.1)
-    eps = np.random.normal(0, 0.1, n)
+    # ε_i
+    if dgp_type == "Heteroskedastic":
+        var_eps = 0.1 * (1 + x[:, 0]**2)
+        eps = np.random.normal(0, np.sqrt(var_eps), n)
+    else:
+        eps = np.random.normal(0, 0.1, n)
 
     # y_i = z_i @ delta_true + eps
     y = z @ delta_true + eps
@@ -89,11 +100,12 @@ L = st.sidebar.slider("L (number of endogenous variables)", 1, 10, 1)
 n = st.sidebar.slider("n (sample size)", 100, 10000, 1000)
 seed = st.sidebar.number_input("Seed", value=42, min_value=0)
 M = st.sidebar.slider("M (number of simulations)", 100, 5000, 1000)
+dgp_type = st.sidebar.selectbox("Data Generating Process", ["Homoskedastic", "Heteroskedastic", "High Endogeneity", "Low Endogeneity"])
 
 data_option = st.sidebar.radio("Data Source", ["Generate", "Paste"])
 
 if data_option == "Generate":
-    x, z, y, delta_true = generate_data(K, L, n, seed)
+    x, z, y, delta_true = generate_data(K, L, n, seed, dgp_type=dgp_type)
     st.sidebar.write(f"δ_true: {delta_true}")
 else:
     pasted_data = st.sidebar.text_area("Paste CSV data (columns: x1,x2,...,z1,z2,...,y)")
@@ -317,7 +329,7 @@ if x is not None:
 
             for m in range(M):
                 # Generate new data with same parameters but different seed
-                x_sim, z_sim, y_sim, _ = generate_data(K, L, n, seed + m + 1, delta_true)
+                x_sim, z_sim, y_sim, _ = generate_data(K, L, n, seed + m + 1, delta_true, dgp_type=dgp_type)
 
                 # Compute moments
                 S_xx_sim, S_xz_sim, S_xy_sim = compute_sample_moments(x_sim, z_sim, y_sim)
@@ -416,7 +428,16 @@ if x is not None:
                     "2-Step SE (Asym)": asym_se_2[j]
                 })
             df_comparison = pd.DataFrame(comparison_data)
-            st.dataframe(df_comparison)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("1-Step GMM Results")
+                df_1step = df_comparison[['Parameter', 'True Value', '1-Step Avg', '1-Step Bias', '1-Step SE (Emp)', '1-Step SE (Asym)']]
+                st.dataframe(df_1step)
+            with col2:
+                st.subheader("2-Step GMM Results")
+                df_2step = df_comparison[['Parameter', 'True Value', '2-Step Avg', '2-Step Bias', '2-Step SE (Emp)', '2-Step SE (Asym)']]
+                st.dataframe(df_2step)
 
             # Hansen J-Test
             st.subheader("Hansen J-Test")
