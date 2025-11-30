@@ -1,0 +1,321 @@
+\documentclass[12pt, a4paper]{article}
+
+% Essential packages for math and formatting
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{geometry}
+\usepackage{parskip} % Adds space between paragraphs, removes indentation
+\usepackage{hyperref} % For clickable links in PDF
+
+% Page layout settings
+\geometry{
+    top=1in,
+    bottom=1in,
+    left=1in,
+    right=1in
+}
+
+% Title setup
+\title{\textbf{An Analytical Report on the Generalized Method of Moments (GMM)}}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Foundational Framework and Estimator Derivation}
+
+\subsection{Analytical Introduction}
+The Generalized Method of Moments (GMM) represents one of the most significant unifying frameworks in modern econometrics. Its strategic importance lies in its remarkable generality. GMM subsumes many classical estimation techniques—including Ordinary Least Squares (OLS), Instrumental Variables (IV), and even Maximum Likelihood Estimation (MLE)—under a single theoretical umbrella. Its power stems from its reliance on a minimal set of assumptions, encapsulated by population moment conditions. Rather than requiring a full specification of the data generating process, GMM proceeds from the foundational assumption that certain expectations, which are functions of the data and the true parameters, are equal to zero in the population. This parsimonious approach provides both robustness and flexibility, making GMM an indispensable tool for empirical analysis.
+
+\subsection{The GMM Criterion Function}
+The entire GMM framework is constructed upon the foundation of population moment conditions, which formalize the identifying assumptions of an economic model.
+
+\subsubsection{The Population Moment Conditions}
+The fundamental assumption of GMM is the existence of an $L \times 1$ vector function $g(w_i; \delta)$ whose expectation is zero when evaluated at the true $K \times 1$ parameter vector, $\delta_0$. Formally, this is expressed as:
+\[
+E[g(w_i; \delta_0)] = 0
+\]
+Here, $w_i$ is a vector of all observed variables for a single cross-sectional unit $i$, and $\delta$ is the parameter vector we wish to estimate. This set of $L$ equations posits that $L$ specific moments in the population are zero at the true parameter value $\delta_0$.
+
+\subsubsection{The Sample Analog}
+In practice, we do not observe the population expectation. Instead, we work with a finite sample of $n$ observations. The principle of analogy dictates that we replace the population expectation with its sample counterpart, the sample average. This yields the sample moment vector, $g_n(\delta)$:
+\[
+g_n(\delta) = \frac{1}{n} \sum g(w_i; \delta)
+\]
+where the summation is from $i=1$ to $n$. Due to sampling variation, $g_n(\delta_0)$ will not be exactly zero, even though its population counterpart is. The GMM estimator is designed to find a parameter estimate $\hat{\delta}$ that makes the sample moment vector $g_n(\hat{\delta})$ as "close" to the zero vector as possible.
+
+\subsubsection{The GMM Criterion}
+To formalize this notion of "closeness," GMM minimizes a quadratic form of the sample moment vector. This objective function is known as the GMM criterion function, $J(\delta, W)$:
+\[
+J(\delta, W) = n \cdot g_n(\delta)' \cdot W \cdot g_n(\delta)
+\]
+The function penalizes deviations of the sample moments from zero. The penalty's magnitude is determined by $W$, an $L \times L$ symmetric, positive definite weighting matrix. In the overidentified case ($L > K$), we have more equations than unknowns, so we cannot typically set all sample moments to zero. The weighting matrix $W$ provides a systematic way to prioritize which moment conditions to match more closely, forming a weighted compromise. The choice of $W$ is critical for the estimator's efficiency.
+
+\subsection{Derivation of the GMM Estimator for a Linear Model}
+To make the framework concrete, we can derive the GMM estimator for the familiar linear model with instrumental variables.
+
+\subsubsection{Linear Model Moment Conditions}
+Consider a linear model where $y_i$ is the dependent variable, $z_i$ is a $K \times 1$ vector of regressors, and $x_i$ is an $L \times 1$ vector of instrumental variables. The structural error is $e_i = y_i - z_i'\delta$. The core assumption of the IV model is that the instruments are uncorrelated with the structural error, $E[x_i \cdot e_i] = 0$. This directly gives us our moment function:
+\[
+g_i(\delta) = x_i \cdot (y_i - z_i'\delta)
+\]
+The sample analog is $g_n(\delta) = (1/n) \sum x_i \cdot (y_i - z_i'\delta)$. Using sample matrix notation, where $s_{xy} = (1/n)\sum x_i y_i$ and $S_{xz} = (1/n)\sum x_i z_i'$, we can write this compactly as:
+\[
+g_n(\delta) = s_{xy} - S_{xz} \cdot \delta
+\]
+
+\subsubsection{First-Order Conditions (FOCs)}
+The GMM estimator $\hat{\delta}$ minimizes $J(\delta, W)$. Substituting our linear $g_n(\delta)$ into the criterion function gives:
+\[
+J(\delta, W) = n \cdot (s_{xy} - S_{xz} \cdot \delta)' \cdot W \cdot (s_{xy} - S_{xz} \cdot \delta)
+\]
+To find the minimum, we differentiate with respect to $\delta$ and set the resulting $K \times 1$ vector of derivatives to zero. Expanding the quadratic form yields terms involving $\delta'S_{xz}'W S_{xz} \delta$. Using the standard vector derivative rule for a quadratic form, $\partial(a'Xa)/\partial a = (X+X')a$, and for linear terms, we obtain:
+\[
+\frac{\partial J(\delta, W)}{\partial \delta} = n \cdot [ -2S_{xz}' \cdot W \cdot s_{xy} + 2(S_{xz}' \cdot W \cdot S_{xz}) \cdot \delta ] = 0
+\]
+Dividing by $2n$ and evaluating at the estimator $\hat{\delta}$ gives the first-order condition:
+\[
+S_{xz}' \cdot W \cdot (s_{xy} - S_{xz} \cdot \hat{\delta}) = 0
+\]
+
+\subsubsection{The Closed-Form Estimator}
+We can now solve the FOC for $\hat{\delta}$ by simple algebraic rearrangement:
+\[
+S_{xz}' \cdot W \cdot s_{xy} - S_{xz}' \cdot W \cdot S_{xz} \cdot \hat{\delta} = 0
+\]
+\[
+S_{xz}' \cdot W \cdot S_{xz} \cdot \hat{\delta} = S_{xz}' \cdot W \cdot s_{xy}
+\]
+Assuming the $K \times K$ matrix $(S_{xz}' \cdot W \cdot S_{xz})$ is invertible, we can pre-multiply by its inverse to isolate the estimator:
+\[
+\hat{\delta}(W) = (S_{xz}' \cdot W \cdot S_{xz})^{-1} \cdot S_{xz}' \cdot W \cdot s_{xy}
+\]
+This is the general formula for the GMM estimator in a linear model for any valid weighting matrix $W$.
+
+\subsection{Equivalence to IV in the Exactly Identified Case}
+An important special case arises when the number of moment conditions (instruments) equals the number of parameters to be estimated.
+
+\subsubsection{The Exactly Identified Case}
+A model is defined as exactly identified when $L = K$. In this situation, we have exactly as many moment conditions as there are unknown parameters, meaning we have a system of $L$ equations in $K=L$ unknowns.
+
+\subsubsection{Proof of Equivalence}
+When $L = K$, it is no longer necessary to minimize a quadratic form to find a "best fit" compromise. Instead, we can typically find a unique parameter vector $\hat{\delta}$ that sets all $L$ sample moment conditions exactly to zero. By setting the sample moment vector $g_n(\hat{\delta})$ to the zero vector, we have:
+\[
+g_n(\hat{\delta}) = s_{xy} - S_{xz} \cdot \hat{\delta} = 0
+\]
+Rearranging this system of equations gives:
+\[
+S_{xz} \cdot \hat{\delta} = s_{xy}
+\]
+In this case, the matrix of sample moments between instruments and regressors, $S_{xz}$, is a $K \times K$ square matrix. Assuming it is invertible (which is an identification condition), we can solve for the estimator $\hat{\delta}$:
+\[
+\hat{\delta} = (S_{xz})^{-1} \cdot s_{xy}
+\]
+This result demonstrates two crucial points. First, the estimator does not depend on the weighting matrix $W$, as $W$ does not appear in the final expression. Second, the result is precisely the formula for the standard Instrumental Variables (IV) estimator. Note that in many texts, the matrix of instruments is denoted $Z$ and the matrix of regressors is $X$. With that convention, the moment conditions are $E[Z_i(y_i - X_i'\delta)]=0$, and the IV estimator is $(Z'X)^{-1}Z'y$. Using the notation of this report ($x_i$ for instruments, $z_i$ for regressors), this corresponds to $(X'Z)^{-1}X'y$, which in sample moment notation is precisely $(S_{xz})^{-1} s_{xy}$.
+
+\subsection{Section Conclusion and Transition}
+In summary, the GMM estimator is derived by minimizing a quadratic form that penalizes deviations of sample moment conditions from zero. This general principle yields a closed-form solution in the linear model that encompasses the standard IV estimator as a special case when the model is exactly identified. With the estimator now formally defined, the logical next step in our analysis is to investigate its large-sample statistical properties, namely consistency and asymptotic normality, which provide the primary justification for its use in applied econometric research.
+
+\hrulefill
+
+\section{Asymptotic Properties of the GMM Estimator}
+
+\subsection{Analytical Introduction}
+For most estimators covered in modern econometrics, including GMM, finite-sample properties such as unbiasedness are either intractable to derive or simply do not hold. For this reason, our analysis and justification of these methods rely almost exclusively on their asymptotic properties—that is, their behavior as the sample size $n$ grows infinitely large. As discussed by Wooldridge, asymptotic analysis provides a unified and powerful framework for assessing the statistical properties of estimators, allowing us to establish consistency (the estimator converges to the true value) and derive its approximate sampling distribution (asymptotic normality).
+
+\subsection{Consistency}
+Consistency ensures that, given enough data, the GMM estimator will converge to the true parameter vector $\delta_0$. This is the most fundamental requirement for any useful estimator.
+
+\subsubsection{Conditions for Consistency}
+The consistency of the GMM estimator $\hat{\delta}$ for the true parameter $\delta_0$ rests on several key theoretical conditions:
+\begin{itemize}
+    \item \textbf{Correct Specification:} The foundational population moment condition must hold at the true parameter: $E[g(w_i; \delta_0)] = 0$. This is the assumption that our model is correctly specified.
+    \item \textbf{Identification:} The true parameter $\delta_0$ must be the unique solution to the population moment condition $E[g(w_i; \delta)] = 0$. If other parameter values also satisfy this condition, the model is not identified, and no estimator can distinguish $\delta_0$ from the alternatives.
+    \item \textbf{Regularity Conditions:} We require standard regularity conditions, such as the Law of Large Numbers applying to our sample moments, ensuring that $g_n(\delta) \xrightarrow{p} E[g(w_i; \delta)]$ uniformly over the parameter space. Furthermore, the weighting matrix $W$ must converge in probability to a non-random, positive definite matrix.
+\end{itemize}
+
+\subsubsection{The Consistency Result}
+Under these conditions, the GMM estimator $\hat{\delta}$, which minimizes the GMM criterion function, is guaranteed to be consistent for $\delta_0$. We state this formally using convergence in probability ($p$) notation:
+\[
+\hat{\delta} \xrightarrow{p} \delta_0
+\]
+
+\subsection{Asymptotic Normality and the Variance-Covariance Matrix}
+While consistency tells us where the estimator is going, asymptotic normality describes its sampling distribution around the true parameter in large samples. This result is what enables us to perform statistical inference, such as constructing confidence intervals and conducting hypothesis tests. To understand the estimator's behavior in large samples, we must characterize the local landscape of the moment conditions around the true parameter $\delta_0$. This landscape is defined by two key features: the steepness (sensitivity to parameters) and the volatility (inherent sampling variance).
+
+\subsubsection{Key Matrices for the Asymptotic Distribution}
+The derivation of the asymptotic distribution relies on two critical matrices that summarize these features of the moment conditions around $\delta_0$:
+\begin{enumerate}
+    \item \textbf{The Jacobian Matrix, $Q$}, is the $L \times K$ matrix of the expected partial derivatives of the moment vector with respect to the parameters:
+    \[ Q = E[ \partial g(w_i; \delta_0) / \partial \delta' ] \]
+    The matrix $Q$ measures the steepness or sensitivity of the moment conditions to small changes in the parameters.
+    \item \textbf{The Moment Variance Matrix, $\Omega$}, is the $L \times L$ variance-covariance matrix of the moment conditions themselves, evaluated at the true parameter:
+    \[ \Omega = E[ g(w_i; \delta_0)g(w_i; \delta_0)' ] \]
+    The matrix $\Omega$ captures the inherent volatility or sampling variation in the moment conditions.
+\end{enumerate}
+
+\subsubsection{Derivation of the Asymptotic Distribution}
+The derivation begins with the first-order condition (FOC) from the GMM minimization problem. Letting $Q_n(\delta) = \partial g_n(\delta)/\partial \delta'$, the FOC is:
+\[ Q_n(\hat{\delta})' \cdot W \cdot g_n(\hat{\delta}) = 0 \]
+
+\begin{itemize}
+    \item \textbf{Taylor Expansion:} We perform a first-order Taylor (or Mean Value) expansion of the sample moment vector $g_n(\hat{\delta})$ around the true parameter $\delta_0$:
+    \[ g_n(\hat{\delta}) \approx g_n(\delta_0) + Q_n(\delta^*) \cdot (\hat{\delta} - \delta_0) \]
+    where $\delta^*$ is a mean value between $\hat{\delta}$ and $\delta_0$.
+    
+    \item \textbf{Substitution and Rearrangement:} For clarity, we substitute this expansion into a linearized version of the FOC, where $Q_n(\hat{\delta})$ is replaced by its probability limit $Q$. This is permissible as $\hat{\delta}$ is consistent for $\delta_0$, which implies that $Q_n(\hat{\delta})$ and $Q_n(\delta^*)$ both converge in probability to $Q$. The linearized FOC is thus:
+    \[ Q' \cdot W \cdot [g_n(\delta_0) + Q_n(\delta^*) \cdot (\hat{\delta} - \delta_0)] \approx 0 \]
+    Rearranging this expression to isolate $(\hat{\delta} - \delta_0)$ yields:
+    \[ (Q' \cdot W \cdot Q_n(\delta^*)) \cdot (\hat{\delta} - \delta_0) \approx -Q' \cdot W \cdot g_n(\delta_0) \]
+    \[ \hat{\delta} - \delta_0 \approx -[Q' \cdot W \cdot Q_n(\delta^*)]^{-1} \cdot Q' \cdot W \cdot g_n(\delta_0) \]
+    
+    \item \textbf{Applying Large Sample Theory:} Now, we scale by $\sqrt{n}$ and apply our key asymptotic results. By the Law of Large Numbers, $Q_n(\delta^*)$ converges in probability to $Q$. By the Central Limit Theorem, $\sqrt{n} \cdot g_n(\delta_0)$ converges in distribution to a Normal random vector with mean 0 and variance-covariance matrix $\Omega$.
+    \[ \sqrt{n}(\hat{\delta} - \delta_0) \approx -[Q'WQ]^{-1} \cdot Q'W \cdot [\sqrt{n} \cdot g_n(\delta_0)] \]
+\end{itemize}
+
+\subsubsection{The Asymptotic Normality Result}
+Combining these steps, we arrive at the asymptotic distribution of the GMM estimator. The $\sqrt{n}$-scaled estimation error converges in distribution ($d$) to a Normal distribution with a mean of zero and a variance-covariance matrix $V_\delta$:
+\[
+\sqrt{n}(\hat{\delta} - \delta_0) \xrightarrow{d} N(0, V_\delta)
+\]
+
+\subsubsection{The "Sandwich" Form of the Variance}
+The asymptotic variance-covariance matrix $V_\delta$ takes a characteristic "sandwich" form, which is ubiquitous in modern econometrics:
+\[
+V_\delta = (Q'WQ)^{-1} \cdot (Q'W\Omega WQ) \cdot (Q'WQ)^{-1}
+\]
+The outer terms, $(Q'WQ)^{-1}$, form the "bread" of the sandwich, while the middle term, $(Q'W\Omega WQ)$, is the "filling." This structure explicitly shows how the estimator's precision is determined by the interaction between the moment sensitivity ($Q$), the moment variance ($\Omega$), and our choice of weighting matrix ($W$).
+
+\subsection{Section Conclusion and Transition}
+The asymptotic properties of consistency and normality provide the theoretical justification for GMM. The derived "sandwich" formula for the asymptotic variance is a crucial result, as it reveals that the precision of our estimates depends directly on the weighting matrix $W$ used in the GMM criterion. This naturally raises a critical question: can we choose $W$ in a way that makes the estimator as precise as possible? This pursuit of an optimal weighting matrix to achieve maximum efficiency is the subject of our next section.
+
+\hrulefill
+
+\section{Efficient GMM and Practical Implementation}
+
+\subsection{Analytical Introduction}
+The concept of efficiency is central to modern econometrics. For a given set of moment conditions, an estimator is considered more efficient than another if it has a smaller asymptotic variance, implying that it yields more precise parameter estimates in large samples. Since the general GMM asymptotic variance formula, $V_\delta$, depends on the weighting matrix $W$, it is natural to seek an optimal $W$ that minimizes this variance. The estimator resulting from this optimal choice is known as the efficient GMM estimator, and it represents the most precise estimator attainable from the specified moment conditions.
+
+\subsection{The Optimal Weighting Matrix}
+The search for the most efficient GMM estimator culminates in a remarkably elegant result regarding the choice of the weighting matrix.
+
+\subsubsection{The Optimal Matrix}
+The asymptotic variance $V_\delta = (Q'WQ)^{-1} \cdot (Q'W\Omega WQ) \cdot (Q'WQ)^{-1}$ is minimized by choosing $W$ to be proportional to the inverse of the variance-covariance matrix of the moment conditions, $\Omega$. The standard choice for the optimal weighting matrix, $W_0$, is therefore:
+\[
+W_0 = \Omega^{-1}
+\]
+This choice effectively gives more weight to moment conditions that have less sampling variability (smaller variance) and accounts for the covariance between different moment conditions.
+
+\subsubsection{Variance Simplification}
+Substituting this optimal choice $W = \Omega^{-1}$ into the general sandwich formula for $V_\delta$ leads to a significant simplification. The derivation proceeds as follows:
+\[
+V_{\delta,Eff} = (Q'\Omega^{-1}Q)^{-1} \cdot (Q'(\Omega^{-1})\Omega(\Omega^{-1})Q) \cdot (Q'\Omega^{-1}Q)^{-1}
+\]
+Since $\Omega^{-1}\Omega = I$ (the identity matrix), the middle term simplifies:
+\[
+V_{\delta,Eff} = (Q'\Omega^{-1}Q)^{-1} \cdot (Q'\Omega^{-1}Q) \cdot (Q'\Omega^{-1}Q)^{-1}
+\]
+Finally, since $A^{-1}A = I$ for any invertible matrix $A$, we are left with the efficient GMM variance:
+\[
+V_{\delta,Eff} = (Q'\Omega^{-1}Q)^{-1}
+\]
+This result can be seen as a generalization of the Gauss-Markov theorem. It establishes that $(Q'\Omega^{-1}Q)^{-1}$ is the lower bound for the asymptotic variance of any GMM estimator based on the moment conditions $E[g(w_i; \delta_0)] = 0$.
+
+\subsection{The Two-Step Estimation Procedure}
+A significant practical challenge remains: the optimal weighting matrix $W_0 = \Omega^{-1}$ depends on $\Omega = E[ g(w_i; \delta_0)g(w_i; \delta_0)' ]$, which in turn depends on the unknown true parameter $\delta_0$. This makes the optimal matrix infeasible for direct use.
+
+\subsubsection{The Feasibility Problem}
+We cannot use the optimal weighting matrix in a single step because we need to know the true parameter $\delta_0$ to construct it, but $\delta_0$ is the very object we are trying to estimate. This circularity is resolved by employing a sequential, multi-step estimation procedure.
+
+\subsubsection{The Two-Step Procedure}
+The standard method for implementing the efficient GMM estimator is a two-step procedure:
+\begin{enumerate}
+    \item \textbf{Step 1: Initial Consistent Estimation.} First, obtain a preliminary but consistent estimate of $\delta$, denoted $\hat{\delta}_1$. This is done by minimizing the GMM criterion $J(\delta, W)$ using any valid (symmetric, positive definite) weighting matrix. A common and simple choice is the identity matrix, $W=I$. For linear IV models, a conventional choice is $W = (Z'Z)^{-1}$, where $Z$ is the matrix of instruments.
+    \item \textbf{Step 2: Estimate the Optimal Weighting Matrix.} Use the consistent first-step estimator $\hat{\delta}_1$ to form a consistent estimator of $\Omega$. This is done by taking the sample analog of the formula for $\Omega$, replacing the unknown $\delta_0$ with $\hat{\delta}_1$:
+    \[ \hat{\Omega} = (1/n) \sum g(w_i; \hat{\delta}_1)g(w_i; \hat{\delta}_1)' \]
+    The estimated optimal weighting matrix is then $\hat{W}_{opt} = \hat{\Omega}^{-1}$.
+    \item \textbf{Step 3: Efficient GMM Estimation.} Finally, obtain the two-step efficient GMM estimator, $\hat{\delta}_2$, by minimizing the GMM criterion again, but this time using the estimated optimal weight $\hat{W}_{opt}$ from the second step. The resulting estimator $\hat{\delta}_2$ is asymptotically efficient.
+\end{enumerate}
+
+\subsection{Relationship to 2SLS}
+The classic two-stage least squares (2SLS) estimator, a cornerstone of applied econometrics, can be understood as a specific instance of GMM. The connection becomes clearest when we consider the conditions under which 2SLS is asymptotically efficient.
+
+\subsubsection{The Equivalence Condition}
+The 2SLS estimator is asymptotically equivalent to the efficient two-step GMM estimator under the crucial assumption of conditional homoskedasticity (and no serial correlation) of the structural error term.
+
+\subsubsection{Demonstrating the Equivalence}
+Under conditional homoskedasticity, the variance of the moment conditions $g_i(\delta) = x_i \cdot e_i$ simplifies significantly. Specifically, $\Omega = E[g_i g_i'] = E[x_i x_i' e_i^2]$. With homoskedasticity, $E[e_i^2 | x_i] = \sigma^2$, so the law of iterated expectations gives us $\Omega = E[E[x_i x_i' e_i^2 | x_i]] = E[x_i x_i' E[e_i^2 | x_i]] = \sigma^2 E[x_i x_i']$.
+
+The optimal weighting matrix is therefore $W_0 = \Omega^{-1} = (\sigma^2 E[x_i x_i'])^{-1}$. Since scalar multiples do not affect the minimization, the optimal weight is proportional to $(E[x_i x_i'])^{-1}$.
+
+The 2SLS estimator is equivalent to a GMM estimator that uses the weighting matrix $W = (X'X/n)^{-1}$. By the Law of Large Numbers, $(X'X/n)$ is a consistent estimator for $E[x_i x_i']$. Therefore, the weighting matrix implicitly used by 2SLS is a consistent estimator of the optimal weighting matrix under the assumption of homoskedasticity. This establishes that 2SLS is an asymptotically efficient GMM estimator when the errors are homoskedastic. When they are not, 2SLS is still consistent but is no longer efficient; in this case, the two-step GMM procedure will yield more precise estimates.
+
+\subsection{Section Conclusion and Transition}
+In conclusion, achieving asymptotic efficiency within the GMM framework requires a two-step procedure to construct a feasible estimate of the optimal weighting matrix. This procedure produces the most precise estimates possible for a given set of moment conditions. Once these efficient estimates are obtained, the GMM framework provides a powerful and coherent toolkit for statistical inference. A unique and particularly important tool in this kit is the ability to test the validity of the underlying moment conditions themselves, a topic we explore next.
+
+\hrulefill
+
+\section{Hypothesis Testing in the GMM Framework}
+
+\subsection{Analytical Introduction}
+Obtaining parameter estimates is only the first step of an empirical investigation. The second, equally crucial step is hypothesis testing, which allows for model validation and statistical inference. The GMM framework offers a comprehensive suite of testing procedures. These include tests for specific restrictions on the parameters of the model, which are analogous to the classical Wald, Lagrange Multiplier (LM), and Likelihood Ratio (LR) tests. Uniquely, GMM also provides a powerful specification test for the validity of the model's foundational moment conditions when the model is overidentified. This test, a hallmark of the GMM approach, is a cornerstone of inference in this framework.
+
+\subsection{Testing Overidentifying Restrictions: Hansen's J-Test}
+The J-test, first developed by Hansen (1982), is arguably the most important specification test in the GMM toolkit, allowing researchers to assess the credibility of their model's identifying assumptions.
+
+\subsubsection{Purpose of the Test}
+The J-test evaluates the joint validity of all moment conditions. It is applicable only in the overidentified case, where the number of moment conditions is greater than the number of parameters ($L > K$). In this scenario, there are more equations ($L$) than unknowns ($K$), meaning the system is overdetermined. It is therefore not generally possible to set all $L$ sample moments to zero simultaneously. The J-test assesses whether the deviations of the sample moments from zero, when evaluated at the efficient GMM estimates, are collectively small enough to be attributable to random sampling error, or if they are so large as to suggest that one or more of the underlying population moment conditions are false.
+
+\subsubsection{The Test Statistic}
+Hansen's J-statistic is defined as the value of the GMM criterion function, evaluated at the efficient two-step GMM estimator $\hat{\delta}_{Eff}$ and using the corresponding estimated optimal weighting matrix $\hat{W}_{opt} = \hat{\Omega}^{-1}$:
+\[
+J = n \cdot g_n(\hat{\delta}_{Eff})' \cdot \hat{\Omega}^{-1} \cdot g_n(\hat{\delta}_{Eff})
+\]
+Intuitively, the J-statistic is a scaled measure of the "distance" between the sample moments and zero, where the distance is weighted optimally to account for the moments' sampling variability.
+
+\subsubsection{The Limiting Distribution}
+Under the null hypothesis that all $L$ population moment conditions are valid ($E[g(w_i; \delta_0)] = 0$), the J-statistic follows a chi-squared distribution in large samples. The degrees of freedom are equal to the number of overidentifying restrictions:
+\[
+J \xrightarrow{d} \chi^2_{L-K}
+\]
+A large value of the J-statistic indicates that the sample moments are jointly "far" from zero, leading to a rejection of the null hypothesis. Such a rejection provides statistical evidence that at least one of the moment conditions is invalid, casting doubt on the specification of the model.
+
+\subsection{Testing Parameter Restrictions: The GMM Distance Test}
+Beyond testing the model specification, GMM provides tools for testing hypotheses about the parameters themselves. A particularly elegant approach is the GMM distance test.
+
+\subsubsection{Formulating the Hypothesis}
+Consider a set of $Q$ linear or non-linear restrictions on the parameter vector $\delta$, which can be formulated under a null hypothesis $H_0: a(\delta) = 0$, where $a(\cdot)$ is a $Q \times 1$ vector function.
+
+\subsubsection{The Test Statistic}
+The GMM distance statistic (D-statistic) is constructed from the difference between the minimized values of the J-statistic for the restricted and unrestricted models. Let $J_{unrestricted}$ be the value of the J-statistic from the standard (unrestricted) efficient GMM estimation. Let $J_{restricted}$ be the value of the criterion function from an efficient GMM estimation where the minimization is performed subject to the constraint $a(\delta)=0$. The test statistic is simply:
+\[
+D = J_{restricted} - J_{unrestricted}
+\]
+The intuition is that if the restrictions imposed by the null hypothesis are true, imposing them during estimation should not lead to a significantly larger minimized criterion value. A large increase suggests the restrictions are inconsistent with the data.
+
+\subsubsection{Asymptotic Distribution and Equivalence}
+Under the null hypothesis $H_0: a(\delta) = 0$, the GMM Distance statistic is asymptotically distributed as a chi-squared random variable with $Q$ degrees of freedom, where $Q$ is the number of restrictions being tested. A key result is that this distance test is asymptotically equivalent to the GMM Wald test, providing an alternative but equally valid method for testing parameter restrictions.
+
+\subsection{GMM and the Asymptotic Efficiency Bound}
+The generality of the GMM framework is so profound that, under certain conditions, it can achieve the theoretical pinnacle of asymptotic efficiency.
+
+\subsubsection{Connection to Maximum Likelihood Estimation (MLE)}
+The Maximum Likelihood Estimator is known to be asymptotically efficient, achieving the Cramér-Rao lower bound for variance. GMM can attain this same efficiency bound, making it asymptotically equivalent to MLE, when the moment conditions are chosen in a specific way.
+
+\subsubsection{The Efficient Moment Condition}
+This equivalence occurs when the moment conditions $g(w_i; \delta)$ are set equal to the score function of the log-likelihood. The score is the vector of partial derivatives of the log-likelihood function with respect to the parameters:
+\[
+g(w_i; \delta) = \partial\ln(f(w_i; \delta))/\partial\delta
+\]
+where $f(w_i; \delta)$ is the correctly specified probability density function of the data. When these score-based moments are used, a fundamental identity from likelihood theory (the Information Matrix Equality) implies that $Q = -\Omega$. As $\Omega$ is a symmetric variance matrix, $Q$ is also symmetric, meaning $Q' = Q = -\Omega$. Substituting these into the efficient GMM variance formula yields:
+\[
+V_{\delta,Eff} = (Q'\Omega^{-1}Q)^{-1} = ((-\Omega)\Omega^{-1}(-\Omega))^{-1} = (\Omega)^{-1}
+\]
+The matrix $\Omega$ in this context is precisely the Information Matrix. Its inverse, $\Omega^{-1}$, is the Cramér-Rao lower bound. This demonstrates that GMM is not merely a generalization of IV; it is a framework capable of encompassing the fully efficient MLE, highlighting its status as a cornerstone of modern econometric theory.
+
+\end{document}
