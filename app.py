@@ -210,6 +210,28 @@ if x is not None:
         axes[2].set_title('Outcome Y')
         st.pyplot(fig)
 
+        # Data Generating Process Explanation
+        st.header("Data Generating Process Explanation")
+        st.markdown("""
+        The data is generated according to the following process:
+
+        - **Instruments (X)**: Each x_i is drawn from a multivariate normal distribution with mean 0 and identity covariance matrix: x_i ~ N(0, I_K)
+
+        - **Endogenous Variables (Z)**: Z is generated as z_i = Π x_i + v_i, where Π is a randomly generated L x K matrix with full rank, and v_i ~ N(0, σ_v^2 I_L). The variance σ_v depends on the endogeneity level: 1.0 for "Low Endogeneity", 0.01 for "High Endogeneity", and 0.1 otherwise.
+
+        - **Parameters (δ)**: If not provided, δ_true is randomly generated from a standard normal distribution.
+
+        - **Error Term (ε)**: The error term depends on the DGP type:
+          - Homoskedastic: ε_i ~ N(0, 0.1)
+          - Heteroskedastic (Linear): ε_i ~ N(0, hetero_level * (1 + |x_{i1}|))
+          - Heteroskedastic (Quadratic): ε_i ~ N(0, hetero_level * (1 + x_{i1}^2))
+          - Heteroskedastic (Exponential): ε_i ~ N(0, hetero_level * exp(|x_{i1}|))
+
+        - **Outcome (Y)**: y_i = z_i' δ_true + ε_i
+
+        This process creates endogenous variables through the correlation between x and z, and allows for different types of heteroskedasticity and endogeneity levels.
+        """)
+
     with tab2:
         if identified:
             st.header("1-Step GMM Estimation")
@@ -469,6 +491,7 @@ if x is not None:
             for j in range(L):
                 one_step_data.append({
                     "Parameter": f"δ_{j+1}",
+                    "Estimated": avg_delta_1[j],
                     "True Value": delta_true[j],
                     "Bias": bias_1[j],
                     "SE (Emp)": se_1[j],
@@ -483,6 +506,7 @@ if x is not None:
             for j in range(L):
                 two_step_data.append({
                     "Parameter": f"δ_{j+1}",
+                    "Estimated": avg_delta_2[j],
                     "True Value": delta_true[j],
                     "Bias": bias_2[j],
                     "SE (Emp)": se_2[j],
@@ -496,13 +520,13 @@ if x is not None:
             comparison_data = []
             for j in range(L):
                 bias_diff = bias_2[j] - bias_1[j]
-                eff_gain_emp = se_1[j] / se_2[j] if se_2[j] != 0 else np.nan
-                eff_gain_asym = asym_se_1[j] / asym_se_2[j] if asym_se_2[j] != 0 else np.nan
+                eff_gain_emp = ((se_1[j] / se_2[j]) - 1) * 100 if se_2[j] != 0 else np.nan
+                eff_gain_asym = ((asym_se_1[j] / asym_se_2[j]) - 1) * 100 if asym_se_2[j] != 0 else np.nan
                 comparison_data.append({
                     "Parameter": f"δ_{j+1}",
-                    "Bias Difference (2-Step - 1-Step)": bias_diff,
-                    "Efficiency Gain (Emp) (SE_1 / SE_2)": eff_gain_emp,
-                    "Efficiency Gain (Asym) (SE_1 / SE_2)": eff_gain_asym
+                    "Bias Difference\n(2-Step - 1-Step)": bias_diff,
+                    "Efficiency Gain\n(Emp) (%)": eff_gain_emp,
+                    "Efficiency Gain\n(Asym) (%)": eff_gain_asym
                 })
             df_comparison = pd.DataFrame(comparison_data)
             st.dataframe(df_comparison)
