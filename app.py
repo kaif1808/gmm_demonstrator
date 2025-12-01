@@ -58,6 +58,36 @@ def generate_data(K, L, n, seed, delta_true=None, dgp_type="Homoskedastic", hete
     y = z @ delta_true + eps
 
     return x, z, y, delta_true
+@st.cache_data(show_spinner=True)
+def run_monte_carlo_simulations(K, L, n, M, seed, dgp_type, hetero_level, gmm_method, delta_true):
+    # Generate all data and compute 1-step TSLS estimates vectorized
+    x_all, z_all, y_all, delta_1_all = generate_and_estimate_tensor(n, M, K, L, seed, dgp_type, hetero_level, delta_true)
+
+    # Compute moments for identity method
+    S_xz_all = np.einsum('mni,mnj->mij', x_all, z_all) / n
+    S_xy_all = np.einsum('mni,mn->mi', x_all, y_all) / n
+
+    # Compute 1-step identity estimates vectorized
+    delta_1_I_all = compute_vectorized_1step_identity(S_xz_all, S_xy_all)
+
+    # Select the appropriate 1-step estimates based on method
+    if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+        delta_hats_1 = delta_1_all
+        delta_hats_1_I = delta_1_I_all
+        delta_1_selected = delta_1_all
+    else:  # W = I
+        delta_hats_1 = delta_1_I_all
+        delta_hats_1_I = delta_1_all
+        delta_1_selected = delta_1_I_all
+
+    # Compute residuals for selected method: (M, n)
+    residuals_1_all = y_all - np.einsum('mnj,mj->mn', z_all, delta_1_selected)
+
+    # Compute 2-step estimates vectorized
+    S_xx_all = np.einsum('mni,mnj->mij', x_all, x_all) / n
+    delta_2_all, J2_all, p_values_all = compute_vectorized_2step(S_xx_all, S_xz_all, S_xy_all, residuals_1_all, x_all)
+
+    return delta_hats_1, delta_hats_1_I, delta_2_all, J2_all, p_values_all
 
 def parse_pasted_data(data_str):
     try:
@@ -524,105 +554,7 @@ if x is not None:
         if data_option == "Generate" and delta_true is not None and identified:
             st.header("Comparison and J Test")
 
-            # Initialize GMMOptimizer for performance monitoring
-            optimizer = GMMOptimizer()
-
-            # Run M simulations with optimized functions and batch processing
-            delta_hats_1 = []  # W = S_xx^-1
-            delta_hats_1_I = []  # W = I
-            delta_hats_2 = []
-            J2s = []
-            p_values = []
-
-            # Collect data for batch processing of 1-step estimates
-            X_batches = []
-            Z_batches = []
-            Y_batches = []
-
-            for m in range(M):
-                # Generate new data with same parameters but different seed
-                x_sim, z_sim, y_sim, _ = generate_data(K, L, n, seed + m + 1, delta_true, dgp_type=dgp_type, hetero_level=hetero_level)
-
-                # Collect for batch processing
-                X_batches.append(x_sim)
-                Z_batches.append(z_sim)
-                Y_batches.append(y_sim)
-
-            # Batch compute 1-step GMM estimates for efficiency
-            batch_results = batch_gmm_estimates(X_batches, Z_batches, Y_batches, method='both')
-            delta_hats_1_batch = batch_results['tsls']
-            delta_hats_1_I_batch = batch_results['identity']
-
-            for m in range(M):
-                x_sim, z_sim, y_sim = X_batches[m], Z_batches[m], Y_batches[m]
-
-                # Get pre-computed estimates from batch
-                delta_hat_1_sim = delta_hats_1_batch[m]
-                delta_hat_1_I_sim = delta_hats_1_I_batch[m]
-
-                # Compute moments using optimized version
-                S_xx_sim, S_xz_sim, S_xy_sim = compute_sample_moments_optimized(x_sim, z_sim, y_sim)
-
-                # Select the appropriate method based on user choice
-                if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
-                    delta_hats_1.append(delta_hat_1_sim)
-                    delta_hats_1_I.append(delta_hat_1_I_sim)
-                    delta_hat_1_selected = delta_hat_1_sim
-                else:  # W = I
-                    delta_hats_1_I.append(delta_hat_1_I_sim)
-                    delta_hats_1.append(delta_hat_1_sim)
-                    delta_hat_1_selected = delta_hat_1_I_sim
-
-                # Residuals 1 using optimized computation
-                residuals_1_sim = compute_residuals(z_sim, y_sim, delta_hat_1_selected)
-
-                # S_hat using optimized version
-                S_hat_sim = compute_S_hat_optimized(residuals_1_sim, x_sim)
-
-                # W2 using optimized inverse
-                try:
-                    W2_sim = optimizer.get_optimized_inverse(S_hat_sim)
-                    inversion_success_sim = True
-                except np.linalg.LinAlgError:
-                    inversion_success_sim = False
-
-                if inversion_success_sim:
-                    # 2-step
-                    delta_hat_2_sim, success_2_sim = compute_gmm_2step(S_xx_sim, S_xz_sim, S_xy_sim, W2_sim)
-                    if success_2_sim:
-                        delta_hats_2.append(delta_hat_2_sim)
-
-                        # Residuals 2
-                        residuals_2_sim = compute_residuals(z_sim, y_sim, delta_hat_2_sim)
-
-                        # g_n
-                        g_n_sim = compute_g_n(x_sim, residuals_2_sim)
-
-                        # J2
-                        J2_sim, success_J_sim = compute_J_stat(g_n_sim, W2_sim, n)
-                        if success_J_sim:
-                            J2s.append(J2_sim)
-                            df = K - L
-                            p_val = compute_j_test_p_value(J2_sim, df)
-                            p_values.append(p_val)
-                        else:
-                            J2s.append(np.nan)
-                            p_values.append(np.nan)
-                    else:
-                        delta_hats_2.append(np.full(L, np.nan))
-                        J2s.append(np.nan)
-                        p_values.append(np.nan)
-                else:
-                    delta_hats_2.append(np.full(L, np.nan))
-                    J2s.append(np.nan)
-                    p_values.append(np.nan)
-
-            # Convert to arrays
-            delta_hats_1 = np.array(delta_hats_1)  # W = S_xx^-1
-            delta_hats_1_I = np.array(delta_hats_1_I)  # W = I
-            delta_hats_2 = np.array(delta_hats_2)
-            J2s = np.array(J2s)
-            p_values = np.array(p_values)
+            delta_hats_1, delta_hats_1_I, delta_hats_2, J2s, p_values = run_monte_carlo_simulations(K, L, n, M, seed, dgp_type, hetero_level, gmm_method, delta_true)
 
             # Compute averages, biases, SEs
             # W = S_xx^-1 method

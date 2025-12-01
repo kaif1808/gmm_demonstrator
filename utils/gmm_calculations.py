@@ -100,16 +100,14 @@ def compute_S_hat(residuals, x):
     S_hat = (1/n) * np.sum(eps_squared[:, None, None] * (x[:, :, None] @ x[:, None, :]), axis=0)
     return S_hat
 
-def compute_S_hat_optimized(residuals, x):
+def compute_S_hat_ultra_fast(residuals, x):
     """
-    Optimized version of S_hat computation using memory-efficient approach.
-    Avoids intermediate 3D array creation by using einsum.
+    Ultra-fast version of S_hat computation using matrix multiplication approach.
+    weighted_X = x * residuals[:, None]; S_hat = (weighted_X.T @ weighted_X) / n
     """
     n = len(x)
-    eps_squared = residuals ** 2
-    # Use einsum for memory-efficient computation
-    # S_hat = (1/n) * sum_i eps_i^2 * outer(x_i, x_i)
-    S_hat = (1/n) * np.einsum('i,ij,ik->jk', eps_squared, x, x, optimize=True)
+    weighted_X = x * residuals[:, None]
+    S_hat = (weighted_X.T @ weighted_X) / n
     return S_hat
 
 def safe_matrix_inverse(matrix):
@@ -129,6 +127,27 @@ def safe_matrix_inverse(matrix):
             # Final fallback with increased regularization
             regularization = 1e-6 * np.eye(matrix.shape[0])
             return np.linalg.inv(matrix + regularization)
+
+def compute_S_hat_ultra_fast_vectorized(residuals, x):
+    """
+    Ultra-fast vectorized version of S_hat computation for batches using 3D operations.
+    Computes S_hat for all M simulations at once.
+
+    Parameters:
+    -----------
+    residuals : ndarray
+        (M, n)
+    x : ndarray
+        (M, n, K)
+
+    Returns:
+    --------
+    S_hat : ndarray
+        (M, K, K)
+    """
+    weighted_X = x * residuals[:, :, None]
+    S_hat = np.matmul(weighted_X.transpose(0, 2, 1), weighted_X) / x.shape[1]
+    return S_hat
 
 def compute_gmm_2step(S_xx, S_xz, S_xy, W2):
     """
@@ -372,7 +391,7 @@ def performance_benchmark(n_replications=100, n=1000, K=5, L=3, seed=42):
     
     # Test S_hat optimization
     S_hat_orig = compute_S_hat(residuals, x)
-    S_hat_opt = compute_S_hat_optimized(residuals, x)
+    S_hat_opt = compute_S_hat_ultra_fast(residuals, x)
     S_hat_diff = np.max(np.abs(S_hat_orig - S_hat_opt))
     
     results = {
@@ -391,47 +410,254 @@ def performance_benchmark(n_replications=100, n=1000, K=5, L=3, seed=42):
     
     return results
 
+def generate_and_estimate_tensor(n, M, K, L, seed, dgp_type, hetero_level, delta_true):
+    """
+    Generate all M datasets at once as 3D tensors and compute vectorized 1-step GMM estimates.
+
+    Parameters:
+    -----------
+    n : int
+        Sample size per dataset
+    M : int
+        Number of Monte Carlo replications
+    K : int
+        Number of instruments
+    L : int
+        Number of endogenous variables
+    seed : int
+        Random seed
+    dgp_type : str
+        Data generating process type
+    hetero_level : float
+        Heteroskedasticity level
+    delta_true : array-like
+        True parameter values (shape L,)
+
+    Returns:
+    --------
+    x : ndarray
+        Instruments (M, n, K)
+    z : ndarray
+        Endogenous variables (M, n, L)
+    y : ndarray
+        Outcome (M, n)
+    delta_1_all : ndarray
+        1-step GMM estimates for all M replications (shape M, L)
+    """
+    np.random.seed(seed)
+
+    # Generate instruments x: (M, n, K)
+    x = np.random.multivariate_normal(np.zeros(K), np.eye(K), (M, n))
+
+    # Generate Π: (L, K) - same for all replications
+    Pi = np.random.randn(L, K)
+    while np.linalg.matrix_rank(Pi) < min(L, K):
+        Pi = np.random.randn(L, K)
+
+    # Generate noise for z: v ~ N(0, sigma_v^2 I_L)
+    if dgp_type == "High Endogeneity":
+        sigma_v = 0.01
+    elif dgp_type == "Low Endogeneity":
+        sigma_v = 1.0
+    else:
+        sigma_v = 0.1
+    v = np.random.multivariate_normal(np.zeros(L), sigma_v * np.eye(L), (M, n))
+
+    # z: (M, n, L) = x @ Pi.T + v
+    z = x @ Pi.T + v
+
+    # Generate ε: (M, n)
+    if dgp_type == "Heteroskedastic (Linear)":
+        var_eps = hetero_level * (1 + np.abs(x[:, :, 0]))  # Use first instrument for heteroskedasticity
+        eps = np.random.normal(0, np.sqrt(var_eps))
+    elif dgp_type == "Heteroskedastic (Quadratic)":
+        var_eps = hetero_level * (1 + x[:, :, 0]**2)
+        eps = np.random.normal(0, np.sqrt(var_eps))
+    elif dgp_type == "Heteroskedastic (Exponential)":
+        var_eps = hetero_level * np.exp(np.abs(x[:, :, 0]))
+        eps = np.random.normal(0, np.sqrt(var_eps))
+    elif dgp_type == "Invalid Instruments (Not Exogenous)":
+        # ε_i = eps_base + alpha * x_i0 + eps_pure
+        eps_base = np.random.normal(0, 0.05, (M, n))
+        alpha = 0.3
+        eps_pure = np.random.normal(0, 0.1, (M, n))
+        eps = eps_base + alpha * x[:, :, 0] + eps_pure
+    else:  # Homoskedastic and others
+        eps = np.random.normal(0, 0.1, (M, n))
+
+    # y: (M, n) = z @ delta_true + eps
+    y = z @ delta_true + eps
+
+    # Compute sample moments vectorized
+    # S_xx: (M, K, K) = (1/n) * sum_i x_m,i x_m,i.T
+    S_xx = np.einsum('mni,mnj->mij', x, x) / n
+
+    # S_xz: (M, K, L) = (1/n) * sum_i x_m,i z_m,i.T
+    S_xz = np.einsum('mni,mnj->mij', x, z) / n
+
+    # S_xy: (M, K) = (1/n) * sum_i x_m,i y_m,i
+    S_xy = np.einsum('mni,mn->mi', x, y) / n
+
+    # Compute 1-step GMM with W = S_xx^{-1} (TSLS equivalent)
+    # For each m: delta_hat = (S_xz[m].T @ S_xx[m]^{-1} @ S_xz[m])^{-1} @ (S_xz[m].T @ S_xx[m]^{-1} @ S_xy[m])
+
+    # Compute S_xx^{-1}: (M, K, K)
+    S_xx_inv = np.linalg.inv(S_xx)
+
+    # S_xz.T @ S_xx_inv: (M, L, K)
+    Sxz_Sxxinv = np.matmul(S_xz.transpose(0,2,1), S_xx_inv)
+
+    # temp = Sxz_Sxxinv @ S_xz: (M, L, L)
+    temp = np.matmul(Sxz_Sxxinv, S_xz)
+
+    # temp_inv: (M, L, L)
+    temp_inv = np.linalg.inv(temp)
+
+    # inner = Sxz_Sxxinv @ S_xy: (M, L)
+    inner = np.einsum('mij,mj->mi', Sxz_Sxxinv, S_xy)
+
+    # delta_1_all: (M, L)
+    delta_1_all = np.einsum('mkj,mk->mj', temp_inv, inner)
+
+    return x, z, y, delta_1_all
+
+def compute_vectorized_1step_identity(S_xz, S_xy):
+    """
+    Compute vectorized 1-step GMM with W = I.
+
+    Parameters:
+    -----------
+    S_xz : ndarray
+        (M, K, L)
+    S_xy : ndarray
+        (M, K)
+
+    Returns:
+    --------
+    delta_1_I_all : ndarray
+        (M, L)
+    """
+    # temp = S_xz.T @ S_xz: (M, L, L)
+    temp = np.matmul(S_xz.transpose(0,2,1), S_xz)
+
+    # temp_inv: (M, L, L)
+    temp_inv = np.linalg.inv(temp)
+
+    # inner = S_xz.T @ S_xy: (M, L)
+    inner = np.einsum('mji,mi->mj', S_xz.transpose(0,2,1), S_xy)
+
+    # delta_1_I_all: (M, L)
+    delta_1_I_all = np.einsum('mij,mj->mi', temp_inv, inner)
+
+    return delta_1_I_all
+
+def compute_vectorized_2step(S_xx, S_xz, S_xy, residuals_1, x):
+    """
+    Compute vectorized 2-step GMM.
+
+    Parameters:
+    -----------
+    S_xx : ndarray
+        (M, K, K)
+    S_xz : ndarray
+        (M, K, L)
+    S_xy : ndarray
+        (M, K)
+    residuals_1 : ndarray
+        (M, n)
+    x : ndarray
+        (M, n, K)
+
+    Returns:
+    --------
+    delta_2_all : ndarray
+        (M, L)
+    J2_all : ndarray
+        (M,)
+    p_values : ndarray
+        (M,)
+    """
+    n = x.shape[1]
+    K = x.shape[2]
+    L = S_xz.shape[2]
+
+    # Compute S_hat vectorized: (M, K, K)
+    S_hat = compute_S_hat_ultra_fast_vectorized(residuals_1, x)
+
+    # W2 = S_hat^{-1}: (M, K, K)
+    W2 = np.linalg.inv(S_hat)
+
+    # temp = S_xz.T @ W2 @ S_xz: (M, L, L)
+    Sxz_W2 = np.matmul(S_xz.transpose(0,2,1), W2)  # S_xz.T @ W2: (M, L, K)
+    temp = np.matmul(Sxz_W2, S_xz)  # temp: (M, L, L)
+
+    # temp_inv: (M, L, L)
+    temp_inv = np.linalg.inv(temp)
+
+    # inner = S_xz.T @ W2 @ S_xy: (M, L)
+    Sxz_W2_Sxy = np.einsum('mij,mj->mi', Sxz_W2, S_xy)
+
+    # delta_2_all: (M, L)
+    delta_2_all = np.einsum('mij,mj->mi', temp_inv, Sxz_W2_Sxy)
+
+    # Compute J2: n * g_n.T @ W2 @ g_n
+    # First compute g_n = (1/n) * x.T @ residuals_1: (M, K)
+    g_n = np.einsum('mni,mn->mi', x, residuals_1) / n
+
+    # J2 = n * g_n.T @ W2 @ g_n: (M,)
+    g_n_W2 = np.matmul(g_n, W2)  # g_n @ W2: (M, K)
+    J2_all = n * np.sum(g_n_W2 * g_n, axis=1)
+
+    # p_values
+    df = K - L
+    if df > 0:
+        p_values = 1 - stats.chi2.cdf(J2_all, df)
+    else:
+        p_values = np.full(M, np.nan)
+
+    return delta_2_all, J2_all, p_values
+
 def validate_optimization_accuracy(tolerance=1e-10):
     """
     Validate that optimized functions produce identical results to original functions.
     """
     np.random.seed(123)
-    
+
     # Test with various dimensions
     test_cases = [
         (100, 2, 1),   # Small
-        (500, 5, 3),   # Medium  
+        (500, 5, 3),   # Medium
         (1000, 10, 5), # Large
     ]
-    
+
     for n, K, L in test_cases:
         x = np.random.randn(n, K)
         z = np.random.randn(n, L)
         y = np.random.randn(n)
-        
+
         S_xx, S_xz, S_xy = compute_sample_moments(x, z, y)
-        
+
         # Test estimators
         delta_orig = compute_gmm_1step(S_xx, S_xz, S_xy)
         delta_opt = compute_gmm_1step_optimized(S_xx, S_xz, S_xy)
-        
+
         delta_id_orig = compute_gmm_1step_identity(S_xz, S_xy)
         delta_id_opt = compute_gmm_1step_identity_optimized(S_xz, S_xy)
-        
+
         # Test variance computations
         residuals = compute_residuals(z, y, delta_orig)
         S_hat = compute_S_hat(residuals, x)
-        
+
         V_orig = compute_asymptotic_variance_1step(S_xx, S_xz, S_hat)
         V_opt = compute_asymptotic_variance_1step_optimized(S_xx, S_xz, S_hat)
-        
+
         V_id_orig = compute_asymptotic_variance_1step_identity(S_xz, S_hat)
         V_id_opt = compute_asymptotic_variance_1step_identity_optimized(S_xz, S_hat)
-        
+
         # Validate accuracy
         assert np.allclose(delta_orig, delta_opt, atol=tolerance), f"Delta TSLS mismatch for n={n}, K={K}, L={L}"
         assert np.allclose(delta_id_orig, delta_id_opt, atol=tolerance), f"Delta Identity mismatch for n={n}, K={K}, L={L}"
         assert np.allclose(V_orig, V_opt, atol=tolerance), f"Variance TSLS mismatch for n={n}, K={K}, L={L}"
         assert np.allclose(V_id_orig, V_id_opt, atol=tolerance), f"Variance Identity mismatch for n={n}, K={K}, L={L}"
-    
+
     return True
