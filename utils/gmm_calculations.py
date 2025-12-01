@@ -17,12 +17,12 @@ def compute_sample_moments(x, z, y):
 def compute_gmm_1step(S_xx, S_xz, S_xy):
     """
     Compute 1-step GMM estimator with W = I.
-    δ̂¹ = (S_xz' S_xx^{-1} S_xz)^{-1} S_xz' S_xx^{-1} S_xy
+    δ̂¹ = (S_xz' S_xz)^{-1} S_xz' S_xy
     """
-    S_xx_inv = np.linalg.inv(S_xx)
-    temp = S_xz.T @ S_xx_inv @ S_xz
+    W = np.eye(S_xz.shape[0])
+    temp = S_xz.T @ W @ S_xz
     temp_inv = np.linalg.inv(temp)
-    delta_hat = temp_inv @ (S_xz.T @ S_xx_inv @ S_xy)
+    delta_hat = temp_inv @ (S_xz.T @ W @ S_xy)
     return delta_hat.flatten()
 
 def compute_residuals(z, y, delta_hat):
@@ -85,13 +85,15 @@ def compute_asymptotic_variance_1step(S_xx, S_xz, S_hat):
     V = A_inv @ B @ A_inv
     return V
 
-def compute_asymptotic_variance_2step(S_xz, W2):
+def compute_asymptotic_variance_2step(S_xz, W2, S_hat):
     """
     Compute asymptotic variance for 2-step GMM.
-    V2 = (S_xz' W2 S_xz)^{-1}
+    V2 = (S_xz' W2 S_xz)^{-1} (S_xz' W2 S_hat W2 S_xz) (S_xz' W2 S_xz)^{-1}
     """
     A = S_xz.T @ W2 @ S_xz
-    V = np.linalg.inv(A)
+    A_inv = np.linalg.inv(A)
+    B = S_xz.T @ W2 @ S_hat @ W2 @ S_xz
+    V = A_inv @ B @ A_inv
     return V
 
 def compute_j_test_p_value(J2, df):

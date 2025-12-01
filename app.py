@@ -32,7 +32,7 @@ def generate_data(K, L, n, seed, delta_true=None, dgp_type="Homoskedastic", hete
 
     # If delta_true not provided, generate random
     if delta_true is None:
-        delta_true = np.random.randn(L)
+        delta_true = np.random.uniform(-5, 5, L)
 
     # ε_i
     if dgp_type == "Heteroskedastic (Linear)":
@@ -109,7 +109,7 @@ M = st.sidebar.slider("M (number of simulations)", 100, 5000, 1000)
 dgp_type = st.sidebar.selectbox("Data Generating Process", ["Homoskedastic", "Heteroskedastic (Linear)", "Heteroskedastic (Quadratic)", "Heteroskedastic (Exponential)", "High Endogeneity", "Low Endogeneity"])
 
 if "Heteroskedastic" in dgp_type:
-    hetero_level = st.sidebar.slider("Heteroskedasticity Level", 0.0, 1.0, 0.1, 0.01)
+    hetero_level = st.sidebar.slider("Heteroskedasticity Level", 0.0, 5.0, 0.1, 0.01)
 else:
     hetero_level = 0.0
 
