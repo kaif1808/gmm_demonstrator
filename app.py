@@ -302,8 +302,8 @@ if x is not None:
                 st.latex(rf"\mathbf{{g}}_n(\hat{{\delta}}^1) = {matrix_to_latex(g_n, '')}")
 
             with st.expander("Explanations"):
-                st.markdown("The 1-step GMM estimator uses the identity matrix as the weighting matrix (W = I).")
-                st.markdown("It solves the sample moment conditions by minimizing the quadratic form.")
+                st.markdown("The 1-step GMM estimator uses the inverse of the instrument covariance matrix as weights (W = S_xx⁻¹).")
+                st.markdown("This makes it equivalent to the Two-Stage Least Squares (2SLS) estimator, which is scale-invariant.")
                 st.markdown("The residuals represent the fitted errors, and g_n(δ̂¹) should be close to zero if the estimator is consistent.")
         else:
             st.warning("Model is not identified. Cannot perform GMM estimation.")
@@ -482,18 +482,6 @@ if x is not None:
 
             if inversion_success:
                 V2 = compute_asymptotic_variance_2step(S_xz_asym, W2, S_hat_asym)
-                asym_se_2 = np.sqrt(np.diag(V2) / n)
-            else:
-                asym_se_2 = np.full(L, np.nan)
-            S_xx_asym, S_xz_asym, S_xy_asym = compute_sample_moments(x, z, y)
-            delta_hat_1_asym = compute_gmm_1step(S_xx_asym, S_xz_asym, S_xy_asym)
-            residuals_1_asym = compute_residuals(z, y, delta_hat_1_asym)
-            S_hat_asym = compute_S_hat(residuals_1_asym, x)
-            V1 = compute_asymptotic_variance_1step(S_xx_asym, S_xz_asym, S_hat_asym)
-            asym_se_1 = np.sqrt(np.diag(V1) / n)
-
-            if inversion_success:
-                V2 = compute_asymptotic_variance_2step(S_xz_asym, W2)
                 asym_se_2 = np.sqrt(np.diag(V2) / n)
             else:
                 asym_se_2 = np.full(L, np.nan)
