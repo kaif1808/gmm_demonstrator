@@ -661,34 +661,35 @@ if x is not None:
             else:
                 asym_se_2 = np.full(L, np.nan)
 
-            # 1-Step GMM Results Tables
-            st.subheader("1-Step GMM Results (W = S_xx⁻¹)")
-            one_step_data = []
-            for j in range(L):
-                one_step_data.append({
-                    "Parameter": f"δ_{j+1}",
-                    "Estimated": avg_delta_1[j],
-                    "True Value": delta_true[j],
-                    "Bias": bias_1[j],
-                    "SE (Emp)": se_1[j],
-                    "SE (Asym)": asym_se_1[j]
-                })
-            df_one_step = pd.DataFrame(one_step_data)
-            st.dataframe(df_one_step)
-            
-            st.subheader("1-Step GMM Results (W = I)")
-            one_step_I_data = []
-            for j in range(L):
-                one_step_I_data.append({
-                    "Parameter": f"δ_{j+1}",
-                    "Estimated": avg_delta_1_I[j],
-                    "True Value": delta_true[j],
-                    "Bias": bias_1_I[j],
-                    "SE (Emp)": se_1_I[j],
-                    "SE (Asym)": asym_se_1_I[j]
-                })
-            df_one_step_I = pd.DataFrame(one_step_I_data)
-            st.dataframe(df_one_step_I)
+            # 1-Step GMM Results Tables - Display only selected method
+            if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+                st.subheader("1-Step GMM Results (W = S_xx⁻¹)")
+                one_step_data = []
+                for j in range(L):
+                    one_step_data.append({
+                        "Parameter": f"δ_{j+1}",
+                        "Estimated": avg_delta_1[j],
+                        "True Value": delta_true[j],
+                        "Bias": bias_1[j],
+                        "SE (Emp)": se_1[j],
+                        "SE (Asym)": asym_se_1[j]
+                    })
+                df_one_step = pd.DataFrame(one_step_data)
+                st.dataframe(df_one_step)
+            else:  # W = I
+                st.subheader("1-Step GMM Results (W = I)")
+                one_step_I_data = []
+                for j in range(L):
+                    one_step_I_data.append({
+                        "Parameter": f"δ_{j+1}",
+                        "Estimated": avg_delta_1_I[j],
+                        "True Value": delta_true[j],
+                        "Bias": bias_1_I[j],
+                        "SE (Emp)": se_1_I[j],
+                        "SE (Asym)": asym_se_1_I[j]
+                    })
+                df_one_step_I = pd.DataFrame(one_step_I_data)
+                st.dataframe(df_one_step_I)
 
             # 2-Step GMM Results Table
             st.subheader("2-Step GMM Results")
