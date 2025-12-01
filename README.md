@@ -31,6 +31,17 @@ This project provides an interactive Streamlit application that demonstrates GMM
    - 2-Step GMM: Efficient GMM with optimal weighting
    - Comparison & Hansen J-Test: Monte Carlo results and specification tests
 
+## Running the Application
+
+To run the Streamlit app with automatic restart functionality on crashes or exits, use the supervisor process manager:
+
+1. Ensure supervisor is installed: `pip install supervisor`
+2. Start the app: `supervisord -c supervisord.conf`
+
+This configuration monitors the 'streamlit run app.py' process and automatically restarts it as needed, including after crashes from memory or CPU overusage. Logs are written to `./logs/streamlit.log` and `./logs/streamlit.err`.
+
+For manual start without restart functionality: `streamlit run app.py`
+
 ## Project Structure
 
 - `app.py`: Streamlit web interface
@@ -38,6 +49,7 @@ This project provides an interactive Streamlit application that demonstrates GMM
 - `gmmdetail/GMMdetail.tex`: Theoretical documentation
 - `gmmlecture.md`: Comprehensive lecture notes on GMM theory
 - `requirements.txt`: Python dependencies
+- `supervisord.conf`: Supervisor configuration for process monitoring
 
 ## Technical Requirements
 
