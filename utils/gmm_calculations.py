@@ -16,10 +16,11 @@ def compute_sample_moments(x, z, y):
 
 def compute_gmm_1step(S_xx, S_xz, S_xy):
     """
-    Compute 1-step GMM estimator with W = I.
-    δ̂¹ = (S_xz' S_xz)^{-1} S_xz' S_xy
+    Compute 2SLS estimator using the scale-invariant weighting matrix W = S_xx^{-1}.
+    This is equivalent to 1-step GMM with W = S_xx^{-1}.
+    δ̂ = (S_xz' S_xx^{-1} S_xz)^{-1} S_xz' S_xx^{-1} S_xy
     """
-    W = np.eye(S_xz.shape[0])
+    W = np.linalg.inv(S_xx)
     temp = S_xz.T @ W @ S_xz
     temp_inv = np.linalg.inv(temp)
     delta_hat = temp_inv @ (S_xz.T @ W @ S_xy)
@@ -45,9 +46,8 @@ def compute_S_hat(residuals, x):
     """
     n = len(x)
     eps_squared = residuals ** 2
-    # Outer product: for each i, eps_i^2 * x_i x_i'
-    # Sum over i: (1/n) sum eps_i^2 x_i x_i'
-    S_hat = (1/n) * sum(eps_squared[i] * np.outer(x[i], x[i]) for i in range(n))
+    # Vectorized: sum over i of eps_i^2 * x_i x_i'
+    S_hat = (1/n) * np.sum(eps_squared[:, None, None] * (x[:, :, None] @ x[:, None, :]), axis=0)
     return S_hat
 
 def compute_gmm_2step(S_xx, S_xz, S_xy, W2):
@@ -75,8 +75,8 @@ def compute_J_stat(g_n, W2, n):
 
 def compute_asymptotic_variance_1step(S_xx, S_xz, S_hat):
     """
-    Compute asymptotic variance for 1-step GMM.
-    V1 = (S_xz' S_xx^{-1} S_xz)^{-1} S_xz' S_xx^{-1} S_hat S_xx^{-1} S_xz (S_xz' S_xx^{-1} S_xz)^{-1}
+    Compute asymptotic variance for the 2SLS estimator (1-step GMM with W = S_xx^{-1}).
+    V = (S_xz' W S_xz)^{-1} (S_xz' W S_hat W S_xz) (S_xz' W S_xz)^{-1} where W = S_xx^{-1}
     """
     S_xx_inv = np.linalg.inv(S_xx)
     A = S_xz.T @ S_xx_inv @ S_xz

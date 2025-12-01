@@ -472,6 +472,19 @@ if x is not None:
             se_2 = np.nanstd(delta_hats_2, axis=0, ddof=1)
 
             # Asymptotic variances (from one simulation, say the last)
+            # Asymptotic variances (from one simulation, say the last)
+            S_xx_asym, S_xz_asym, S_xy_asym = compute_sample_moments(x, z, y)
+            delta_hat_1_asym = compute_gmm_1step(S_xx_asym, S_xz_asym, S_xy_asym)
+            residuals_1_asym = compute_residuals(z, y, delta_hat_1_asym)
+            S_hat_asym = compute_S_hat(residuals_1_asym, x)
+            V1 = compute_asymptotic_variance_1step(S_xx_asym, S_xz_asym, S_hat_asym)
+            asym_se_1 = np.sqrt(np.diag(V1) / n)
+
+            if inversion_success:
+                V2 = compute_asymptotic_variance_2step(S_xz_asym, W2, S_hat_asym)
+                asym_se_2 = np.sqrt(np.diag(V2) / n)
+            else:
+                asym_se_2 = np.full(L, np.nan)
             S_xx_asym, S_xz_asym, S_xy_asym = compute_sample_moments(x, z, y)
             delta_hat_1_asym = compute_gmm_1step(S_xx_asym, S_xz_asym, S_xy_asym)
             residuals_1_asym = compute_residuals(z, y, delta_hat_1_asym)
