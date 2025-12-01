@@ -189,7 +189,7 @@ if x is not None:
             delta_hat = compute_gmm_1step_optimized(S_xx, S_xz, S_xy)
             residuals_1 = compute_residuals(z, y, delta_hat)
             g_n = compute_g_n(x, residuals_1)
-            S_hat = compute_S_hat_optimized(residuals_1, x)
+            S_hat = compute_S_hat_ultra_fast(residuals_1, x)
             delta_hat_I = residuals_1_I = g_n_I = None
         else:  # W = I
             delta_hat_I = compute_gmm_1step_identity_optimized(S_xz, S_xy)
@@ -199,7 +199,7 @@ if x is not None:
             # as it's the conventional approach
             delta_hat_temp = compute_gmm_1step_optimized(S_xx, S_xz, S_xy)
             residuals_temp = compute_residuals(z, y, delta_hat_temp)
-            S_hat = compute_S_hat_optimized(residuals_temp, x)
+            S_hat = compute_S_hat_ultra_fast(residuals_temp, x)
             delta_hat = residuals_1 = g_n = None
 
         # Ensure delta_hat_I is always computed for tab3 using optimized version
@@ -316,7 +316,7 @@ if x is not None:
                     delta_hat = compute_gmm_1step_optimized(S_xx, S_xz, S_xy)
                     residuals_1 = compute_residuals(z, y, delta_hat)
                     g_n = compute_g_n(x, residuals_1)
-                    S_hat = compute_S_hat_optimized(residuals_1, x)
+                    S_hat = compute_S_hat_ultra_fast(residuals_1, x)
 
                 current_delta = delta_hat
                 current_residuals = residuals_1
@@ -576,9 +576,9 @@ if x is not None:
             delta_hat_1_asym = compute_gmm_1step_optimized(S_xx_asym, S_xz_asym, S_xy_asym)
             delta_hat_1_I_asym = compute_gmm_1step_identity_optimized(S_xz_asym, S_xy_asym)
             residuals_1_asym = compute_residuals(z, y, delta_hat_1_asym)
-            S_hat_asym = compute_S_hat_optimized(residuals_1_asym, x)
+            S_hat_asym = compute_S_hat_ultra_fast(residuals_1_asym, x)
             residuals_1_I_asym = compute_residuals(z, y, delta_hat_1_I_asym)
-            S_hat_I_asym = compute_S_hat_optimized(residuals_1_I_asym, x)
+            S_hat_I_asym = compute_S_hat_ultra_fast(residuals_1_I_asym, x)
 
             # Asymptotic standard errors for both 1-step methods using optimized versions
             V1 = compute_asymptotic_variance_1step_optimized(S_xx_asym, S_xz_asym, S_hat_asym)
