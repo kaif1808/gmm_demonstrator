@@ -707,35 +707,26 @@ if x is not None:
             st.dataframe(df_two_step)
 
             # Direct Comparison Table
-            st.subheader("Direct Comparison: All Methods")
+            st.subheader("Direct Comparison: Selected 1-Step vs 2-Step")
             comparison_data = []
             for j in range(L):
-                # Compare 2-step vs W=S_xx^-1
-                bias_diff_2_vs_1 = bias_2[j] - bias_1[j]
-                eff_gain_2_vs_1_emp = ((se_1[j] / se_2[j]) - 1) * 100 if se_2[j] != 0 else np.nan
-                eff_gain_2_vs_1_asym = ((asym_se_1[j] / asym_se_2[j]) - 1) * 100 if asym_se_2[j] != 0 else np.nan
-                
-                # Compare 2-step vs W=I
-                bias_diff_2_vs_I = bias_2[j] - bias_1_I[j]
-                eff_gain_2_vs_I_emp = ((se_1_I[j] / se_2[j]) - 1) * 100 if se_2[j] != 0 else np.nan
-                eff_gain_2_vs_I_asym = ((asym_se_1_I[j] / asym_se_2[j]) - 1) * 100 if asym_se_2[j] != 0 else np.nan
-                
-                # Compare W=S_xx^-1 vs W=I
-                bias_diff_1_vs_I = bias_1_I[j] - bias_1[j]
-                eff_gain_1_vs_I_emp = ((se_1[j] / se_1_I[j]) - 1) * 100 if se_1_I[j] != 0 else np.nan
-                eff_gain_1_vs_I_asym = ((asym_se_1[j] / asym_se_1_I[j]) - 1) * 100 if asym_se_1_I[j] != 0 else np.nan
-                
+                # Compare 2-step vs selected 1-step
+                if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+                    bias_diff = bias_2[j] - bias_1[j]
+                    eff_gain_emp = ((se_1[j] / se_2[j]) - 1) * 100 if se_2[j] != 0 else np.nan
+                    eff_gain_asym = ((asym_se_1[j] / asym_se_2[j]) - 1) * 100 if asym_se_2[j] != 0 else np.nan
+                    method_label = "W=S_xx⁻¹"
+                else:
+                    bias_diff = bias_2[j] - bias_1_I[j]
+                    eff_gain_emp = ((se_1_I[j] / se_2[j]) - 1) * 100 if se_2[j] != 0 else np.nan
+                    eff_gain_asym = ((asym_se_1_I[j] / asym_se_2[j]) - 1) * 100 if asym_se_2[j] != 0 else np.nan
+                    method_label = "W=I"
+
                 comparison_data.append({
                     "Parameter": f"δ_{j+1}",
-                    "Bias: 2-Step vs W=S_xx⁻¹": bias_diff_2_vs_1,
-                    "Bias: 2-Step vs W=I": bias_diff_2_vs_I,
-                    "Bias: W=S_xx⁻¹ vs W=I": bias_diff_1_vs_I,
-                    "Eff Gain: 2-Step vs W=S_xx⁻¹ (Emp %)": eff_gain_2_vs_1_emp,
-                    "Eff Gain: 2-Step vs W=I (Emp %)": eff_gain_2_vs_I_emp,
-                    "Eff Gain: W=S_xx⁻¹ vs W=I (Emp %)": eff_gain_1_vs_I_emp,
-                    "Eff Gain: 2-Step vs W=S_xx⁻¹ (Asym %)": eff_gain_2_vs_1_asym,
-                    "Eff Gain: 2-Step vs W=I (Asym %)": eff_gain_2_vs_I_asym,
-                    "Eff Gain: W=S_xx⁻¹ vs W=I (Asym %)": eff_gain_1_vs_I_asym
+                    f"Bias: 2-Step vs {method_label}": bias_diff,
+                    f"Eff Gain: 2-Step vs {method_label} (Emp %)": eff_gain_emp,
+                    f"Eff Gain: 2-Step vs {method_label} (Asym %)": eff_gain_asym
                 })
             df_comparison = pd.DataFrame(comparison_data)
             st.dataframe(df_comparison)
@@ -773,8 +764,10 @@ if x is not None:
             if L == 1:
                 axes = [axes]
             for j in range(L):
-                axes[j].hist(delta_hats_1[:, j], alpha=0.4, label='1-Step (W=S_xx⁻¹)', bins=30, color='blue')
-                axes[j].hist(delta_hats_1_I[:, j], alpha=0.4, label='1-Step (W=I)', bins=30, color='green')
+                if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+                    axes[j].hist(delta_hats_1[:, j], alpha=0.4, label='1-Step (W=S_xx⁻¹)', bins=30, color='blue')
+                else:
+                    axes[j].hist(delta_hats_1_I[:, j], alpha=0.4, label='1-Step (W=I)', bins=30, color='green')
                 axes[j].hist(delta_hats_2[:, j], alpha=0.4, label='2-Step', bins=30, color='orange')
                 axes[j].axvline(delta_true[j], color='red', linestyle='--', linewidth=2, label='True')
                 axes[j].set_title(f'δ_{j+1}')
