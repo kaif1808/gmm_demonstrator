@@ -519,7 +519,7 @@ def generate_and_estimate_tensor(n, M, K, L, seed, dgp_type, hetero_level, delta
     # delta_1_all: (M, L)
     delta_1_all = np.einsum('mkj,mk->mj', temp_inv, inner)
 
-    return x, z, y, delta_1_all
+    return x, z, y, delta_1_all, S_xx, S_xz, S_xy
 
 def compute_vectorized_1step_identity(S_xz, S_xy):
     """
@@ -580,6 +580,7 @@ def compute_vectorized_2step(S_xx, S_xz, S_xy, residuals_1, x):
     n = x.shape[1]
     K = x.shape[2]
     L = S_xz.shape[2]
+    M = x.shape[0]
 
     # Compute S_hat vectorized: (M, K, K)
     S_hat = compute_S_hat_ultra_fast_vectorized(residuals_1, x)
@@ -600,9 +601,8 @@ def compute_vectorized_2step(S_xx, S_xz, S_xy, residuals_1, x):
     # delta_2_all: (M, L)
     delta_2_all = np.einsum('mij,mj->mi', temp_inv, Sxz_W2_Sxy)
 
-    # Compute J2: n * g_n.T @ W2 @ g_n
-    # First compute g_n = (1/n) * x.T @ residuals_1: (M, K)
-    g_n = np.einsum('mni,mn->mi', x, residuals_1) / n
+    # Compute g_n directly using sufficient statistics: g_n = S_xy - S_xz @ delta_2
+    g_n = S_xy - np.einsum('mkl,ml->mk', S_xz, delta_2_all)
 
     # J2 = n * g_n.T @ W2 @ g_n: (M,)
     g_n_W2 = np.matmul(g_n, W2)  # g_n @ W2: (M, K)

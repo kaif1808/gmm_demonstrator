@@ -60,34 +60,22 @@ def generate_data(K, L, n, seed, delta_true=None, dgp_type="Homoskedastic", hete
     return x, z, y, delta_true
 @st.cache_data(show_spinner=True)
 def run_monte_carlo_simulations(K, L, n, M, seed, dgp_type, hetero_level, gmm_method, delta_true):
-    # Generate all data and compute 1-step TSLS estimates vectorized
-    x_all, z_all, y_all, delta_1_all = generate_and_estimate_tensor(n, M, K, L, seed, dgp_type, hetero_level, delta_true)
-
-    # Compute moments for identity method
-    S_xz_all = np.einsum('mni,mnj->mij', x_all, z_all) / n
-    S_xy_all = np.einsum('mni,mn->mi', x_all, y_all) / n
+    # Generate all data and compute 1-step TSLS estimates vectorized, along with moments
+    x_all, z_all, y_all, delta_tsls, S_xx_all, S_xz_all, S_xy_all = generate_and_estimate_tensor(n, M, K, L, seed, dgp_type, hetero_level, delta_true)
 
     # Compute 1-step identity estimates vectorized
-    delta_1_I_all = compute_vectorized_1step_identity(S_xz_all, S_xy_all)
+    delta_identity = compute_vectorized_1step_identity(S_xz_all, S_xy_all)
 
-    # Select the appropriate 1-step estimates based on method
-    if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
-        delta_hats_1 = delta_1_all
-        delta_hats_1_I = delta_1_I_all
-        delta_1_selected = delta_1_all
-    else:  # W = I
-        delta_hats_1 = delta_1_I_all
-        delta_hats_1_I = delta_1_all
-        delta_1_selected = delta_1_I_all
+    # Always use TSLS as initial for 2-step GMM
+    delta_1_selected = delta_tsls
 
     # Compute residuals for selected method: (M, n)
     residuals_1_all = y_all - np.einsum('mnj,mj->mn', z_all, delta_1_selected)
 
     # Compute 2-step estimates vectorized
-    S_xx_all = np.einsum('mni,mnj->mij', x_all, x_all) / n
-    delta_2_all, J2_all, p_values_all = compute_vectorized_2step(S_xx_all, S_xz_all, S_xy_all, residuals_1_all, x_all)
+    delta_2, J2s, p_values = compute_vectorized_2step(S_xx_all, S_xz_all, S_xy_all, residuals_1_all, x_all)
 
-    return delta_hats_1, delta_hats_1_I, delta_2_all, J2_all, p_values_all
+    return delta_tsls, delta_identity, delta_2, J2s, p_values
 
 def parse_pasted_data(data_str):
     try:
@@ -554,7 +542,15 @@ if x is not None:
         if data_option == "Generate" and delta_true is not None and identified:
             st.header("Comparison and J Test")
 
-            delta_hats_1, delta_hats_1_I, delta_hats_2, J2s, p_values = run_monte_carlo_simulations(K, L, n, M, seed, dgp_type, hetero_level, gmm_method, delta_true)
+            delta_tsls, delta_identity, delta_hats_2, J2s, p_values = run_monte_carlo_simulations(K, L, n, M, seed, dgp_type, hetero_level, gmm_method, delta_true)
+
+            # Assign delta_hats_1 and delta_hats_1_I based on gmm_method selection
+            if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+                delta_hats_1 = delta_tsls
+                delta_hats_1_I = delta_identity
+            else:
+                delta_hats_1 = delta_identity
+                delta_hats_1_I = delta_tsls
 
             # Compute averages, biases, SEs
             # W = S_xx^-1 method
