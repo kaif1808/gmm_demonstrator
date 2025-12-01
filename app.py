@@ -202,7 +202,7 @@ if x is not None:
         delta_hat_I = residuals_1_I = g_n_I = None
         inversion_success = False
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Data & DGP", "1-Step GMM", "2-Step GMM", "Comparison & Hansen J-Test"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Data & DGP", "1-Step GMM", "2-Step GMM", "Comparison and J Test"])
 
     with tab1:
         # Summary statistics
@@ -436,96 +436,10 @@ if x is not None:
         else:
             st.warning("Model is not identified. Cannot perform GMM estimation.")
 
+
     with tab3:
         if identified:
-            st.header("1-Step GMM with W = I (Identity Matrix)")
-
-            # Display moments
-            st.subheader("Sample Moments")
-            st.latex(matrix_to_latex(S_xx, r"\mathbf{S}_{xx}"))
-            st.latex(matrix_to_latex(S_xz, r"\mathbf{S}_{xz}"))
-            st.latex(matrix_to_latex(S_xy, r"\mathbf{S}_{xy}"))
-
-            st.subheader("1-Step GMM Estimator (W = I)")
-            st.latex(matrix_to_latex(delta_hat_I, r"\hat{\delta}^{1}_{I}"))
-
-            # If delta_true available, show difference
-            if delta_true is not None:
-                st.write(f"True δ: {delta_true}")
-                st.write(f"Estimation Error: {delta_hat_I - delta_true}")
-
-            # Compute standard errors using optimized version
-            try:
-                V1_I = compute_asymptotic_variance_1step_identity_optimized(S_xz, S_hat)
-                se_1_I = np.sqrt(np.diag(V1_I) / n)
-                st.subheader("Standard Errors (Asymptotic)")
-                for i, se in enumerate(se_1_I):
-                    st.write(f"SE(δ_{i+1}): {se:.6f}")
-            except:
-                st.error("Failed to compute standard errors")
-
-            # Residuals
-            st.subheader("Residuals")
-            st.write("Summary of Residuals:")
-            st.write(pd.Series(residuals_1_I).describe())
-
-            # Residual distribution
-            st.subheader("Residual Distribution")
-            fig, ax = plt.subplots(figsize=(6, 4))
-            ax.hist(residuals_1_I, bins=30, alpha=0.7)
-            ax.set_title('Residuals from 1-Step GMM (W = I)')
-            st.pyplot(fig)
-
-            # g_n
-            st.subheader("g_n(δ̂¹_I)")
-            st.latex(matrix_to_latex(g_n_I, r"\mathbf{g}_n(\hat{\delta}^{1}_{I})"))
-
-            # Compute intermediates for numerical display
-            temp_1step_I = S_xz.T @ S_xz
-            temp_1step_I_inv = np.linalg.inv(temp_1step_I)
-            inner_1step_I = S_xz.T @ S_xy
-
-            # Expanders
-            with st.expander("Formulas and Derivations"):
-                st.markdown("**Moment Conditions:**")
-                st.latex(r"E[x_i (y_i - z_i' \delta)] = 0")
-                st.markdown("**Sample Moments:**")
-                st.latex(r"\mathbf{S}_{xx} = \frac{1}{n} \sum x_i x_i'")
-                st.latex(r"\mathbf{S}_{xz} = \frac{1}{n} \sum x_i z_i'")
-                st.latex(r"\mathbf{S}_{xy} = \frac{1}{n} \sum x_i y_i")
-                st.markdown("**1-Step GMM Estimator (W = I):**")
-                st.latex(r"\hat{\delta}^{1}_{I} = (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1} \mathbf{S}_{xz}' \mathbf{S}_{xy}")
-                st.markdown("**Residuals:**")
-                st.latex(r"\hat{\epsilon}_i = y_i - z_i' \hat{\delta}^{1}_{I}")
-                st.markdown("**g_n(δ):**")
-                st.latex(r"\mathbf{g}_n(\delta) = \frac{1}{n} \sum x_i (y_i - z_i' \delta)")
-                st.markdown("**Asymptotic Variance:**")
-                st.latex(r"V_I = (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1} (\mathbf{S}_{xz}' \hat{\mathbf{S}} \mathbf{S}_{xz}) (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1}")
-
-                st.markdown("**Numerical Calculations:**")
-                st.markdown("**Sample Moments:**")
-                st.latex(matrix_to_latex(S_xx, r"\mathbf{S}_{xx}"))
-                st.latex(matrix_to_latex(S_xz, r"\mathbf{S}_{xz}"))
-                st.latex(matrix_to_latex(S_xy, r"\mathbf{S}_{xy}"))
-                st.markdown("**1-Step GMM Estimator Computation:**")
-                st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xz}} = {matrix_to_latex(temp_1step_I, '')}")
-                st.latex(rf"(\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xz}})^{{-1}} = {matrix_to_latex(temp_1step_I_inv, '')}")
-                st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xy}} = {matrix_to_latex(inner_1step_I, '')}")
-                st.latex(rf"\hat{{\delta}}^{{1}}_{{I}} = {matrix_to_latex(delta_hat_I, '')}")
-                st.markdown("**g_n(δ̂¹_I):**")
-                st.latex(rf"\mathbf{{g}}_n(\hat{{\delta}}^{{1}}_{{I}}) = {matrix_to_latex(g_n_I, '')}")
-
-            with st.expander("Explanations"):
-                st.markdown("The 1-step GMM estimator with W = I (identity matrix) is a simple alternative weighting scheme.")
-                st.markdown("This method gives equal weight to all moment conditions, unlike the TSLS equivalent which uses S_xx⁻¹.")
-                st.markdown("The residuals represent the fitted errors, and g_n(δ̂¹_I) should be close to zero if the estimator is consistent.")
-                st.markdown("Standard errors are computed using the appropriate asymptotic variance formula for the identity weighting matrix.")
-        else:
-            st.warning("Model is not identified. Cannot perform GMM estimation.")
-
-    with tab4:
-        if identified:
-            st.header("2-Step GMM Estimation")
+            st.header("2-Step GMM")
 
             if inversion_success:
                 st.subheader("2-Step GMM Estimator")
@@ -608,7 +522,7 @@ if x is not None:
 
     with tab4:
         if data_option == "Generate" and delta_true is not None and identified:
-            st.header("Comparison & Hansen J-Test")
+            st.header("Comparison and J Test")
 
             # Initialize GMMOptimizer for performance monitoring
             optimizer = GMMOptimizer()
