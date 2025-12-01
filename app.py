@@ -44,6 +44,13 @@ def generate_data(K, L, n, seed, delta_true=None, dgp_type="Homoskedastic", hete
     elif dgp_type == "Heteroskedastic (Exponential)":
         var_eps = hetero_level * np.exp(np.abs(x[:, 0]))
         eps = np.random.normal(0, np.sqrt(var_eps), n)
+    elif dgp_type == "Invalid Instruments (Not Exogenous)":
+        # Create invalid instruments by correlating x with error term
+        # ε_i = eps_base + alpha * x_i0 + eps_pure
+        eps_base = np.random.normal(0, 0.05, n)
+        alpha = 0.3  # Strength of correlation between instrument and error term
+        eps_pure = np.random.normal(0, 0.1, n)
+        eps = eps_base + alpha * x[:, 0] + eps_pure
     else:
         eps = np.random.normal(0, 0.1, n)
 
@@ -106,12 +113,19 @@ L = st.sidebar.slider("L (number of endogenous variables)", 1, 10, 1)
 n = st.sidebar.slider("n (sample size)", 100, 10000, 1000)
 seed = st.sidebar.number_input("Seed", value=42, min_value=0)
 M = st.sidebar.slider("M (number of simulations)", 100, 5000, 1000)
-dgp_type = st.sidebar.selectbox("Data Generating Process", ["Homoskedastic", "Heteroskedastic (Linear)", "Heteroskedastic (Quadratic)", "Heteroskedastic (Exponential)", "High Endogeneity", "Low Endogeneity"])
+dgp_type = st.sidebar.selectbox("Data Generating Process", ["Homoskedastic", "Heteroskedastic (Linear)", "Heteroskedastic (Quadratic)", "Heteroskedastic (Exponential)", "High Endogeneity", "Low Endogeneity", "Invalid Instruments (Not Exogenous)"])
 
 if "Heteroskedastic" in dgp_type:
     hetero_level = st.sidebar.slider("Heteroskedasticity Level", 0.0, 5.0, 0.1, 0.01)
 else:
     hetero_level = 0.0
+
+# 1-Step GMM Method Selection
+gmm_method = st.sidebar.selectbox(
+    "1-Step GMM Method",
+    ["W = S_xx⁻¹ (TSLS Equivalent)", "W = I (Identity Matrix)"],
+    index=0
+)
 
 data_option = st.sidebar.radio("Data Source", ["Generate", "Paste"])
 
@@ -139,10 +153,24 @@ if x is not None:
     # Pre-compute GMM estimates if identified
     if identified:
         S_xx, S_xz, S_xy = compute_sample_moments(x, z, y)
-        delta_hat = compute_gmm_1step(S_xx, S_xz, S_xy)
-        residuals_1 = compute_residuals(z, y, delta_hat)
-        g_n = compute_g_n(x, residuals_1)
-        S_hat = compute_S_hat(residuals_1, x)
+        
+        # Compute only the selected 1-step GMM method
+        if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+            delta_hat = compute_gmm_1step(S_xx, S_xz, S_xy)
+            residuals_1 = compute_residuals(z, y, delta_hat)
+            g_n = compute_g_n(x, residuals_1)
+            S_hat = compute_S_hat(residuals_1, x)
+            delta_hat_I = residuals_1_I = g_n_I = None
+        else:  # W = I
+            delta_hat_I = compute_gmm_1step_identity(S_xz, S_xy)
+            residuals_1_I = compute_residuals(z, y, delta_hat_I)
+            g_n_I = compute_g_n(x, residuals_1_I)
+            # Note: For 2-step GMM, we still need S_hat from the W=S_xx^{-1} method
+            # as it's the conventional approach
+            delta_hat_temp = compute_gmm_1step(S_xx, S_xz, S_xy)
+            residuals_temp = compute_residuals(z, y, delta_hat_temp)
+            S_hat = compute_S_hat(residuals_temp, x)
+            delta_hat = residuals_1 = g_n = None
         try:
             W2 = np.linalg.inv(S_hat)
             inversion_success = True
@@ -164,6 +192,7 @@ if x is not None:
             J2 = None
     else:
         S_xx = S_xz = S_xy = delta_hat = residuals_1 = g_n = S_hat = W2 = delta_hat_2 = residuals_2 = g_n_2 = J2 = None
+        delta_hat_I = residuals_1_I = g_n_I = None
         inversion_success = False
 
     tab1, tab2, tab3, tab4 = st.tabs(["Data & DGP", "1-Step GMM", "2-Step GMM", "Comparison & Hansen J-Test"])
@@ -226,6 +255,7 @@ if x is not None:
           - Heteroskedastic (Linear): ε_i ~ N(0, hetero_level * (1 + |x_{i1}|))
           - Heteroskedastic (Quadratic): ε_i ~ N(0, hetero_level * (1 + x_{i1}^2))
           - Heteroskedastic (Exponential): ε_i ~ N(0, hetero_level * exp(|x_{i1}|))
+          - Invalid Instruments (Not Exogenous): ε_i = ε_base + α * x_{i1} + ε_pure, where ε_base ~ N(0, 0.05), α = 0.3, ε_pure ~ N(0, 0.1)
 
         - **Outcome (Y)**: y_i = z_i' δ_true + ε_i
 
@@ -234,7 +264,7 @@ if x is not None:
 
     with tab2:
         if identified:
-            st.header("1-Step GMM Estimation")
+            st.header(f"1-Step GMM - {gmm_method}")
 
             # Display moments
             st.subheader("Sample Moments")
@@ -242,35 +272,211 @@ if x is not None:
             st.latex(matrix_to_latex(S_xz, r"\mathbf{S}_{xz}"))
             st.latex(matrix_to_latex(S_xy, r"\mathbf{S}_{xy}"))
 
-            st.subheader("1-Step GMM Estimator")
-            st.latex(matrix_to_latex(delta_hat, r"\hat{\delta}^1"))
+            # Select the appropriate method based on user choice
+            if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+                if delta_hat is None:
+                    # Compute on demand if not already computed
+                    delta_hat = compute_gmm_1step(S_xx, S_xz, S_xy)
+                    residuals_1 = compute_residuals(z, y, delta_hat)
+                    g_n = compute_g_n(x, residuals_1)
+                    S_hat = compute_S_hat(residuals_1, x)
+                
+                current_delta = delta_hat
+                current_residuals = residuals_1
+                current_g_n = g_n
+                method_name = "TSLS"
+                
+                # Compute standard errors
+                try:
+                    V1 = compute_asymptotic_variance_1step(S_xx, S_xz, S_hat)
+                    se_1 = np.sqrt(np.diag(V1) / n)
+                    st.subheader("Standard Errors (Asymptotic)")
+                    for i, se in enumerate(se_1):
+                        st.write(f"SE(δ_{i+1}): {se:.6f}")
+                except:
+                    st.error("Failed to compute standard errors")
+                    se_1 = None
+            else:  # W = I
+                if delta_hat_I is None:
+                    # Compute on demand if not already computed
+                    delta_hat_I = compute_gmm_1step_identity(S_xz, S_xy)
+                    residuals_1_I = compute_residuals(z, y, delta_hat_I)
+                    g_n_I = compute_g_n(x, residuals_1_I)
+                
+                current_delta = delta_hat_I
+                current_residuals = residuals_1_I
+                current_g_n = g_n_I
+                method_name = "I"
+                
+                # Compute standard errors
+                try:
+                    V1_I = compute_asymptotic_variance_1step_identity(S_xz, S_hat)
+                    se_1_I = np.sqrt(np.diag(V1_I) / n)
+                    st.subheader("Standard Errors (Asymptotic)")
+                    for i, se in enumerate(se_1_I):
+                        st.write(f"SE(δ_{i+1}): {se:.6f}")
+                except:
+                    st.error("Failed to compute standard errors")
+                    se_1_I = None
+
+            st.subheader(f"1-Step GMM Estimator ({gmm_method})")
+            st.latex(matrix_to_latex(current_delta, rf"\hat{{\delta}}^{{1}}_{{{method_name}}}"))
 
             # If delta_true available, show difference
             if delta_true is not None:
                 st.write(f"True δ: {delta_true}")
-                st.write(f"Estimation Error: {delta_hat - delta_true}")
+                st.write(f"Estimation Error: {current_delta - delta_true}")
 
             # Residuals
             st.subheader("Residuals")
             st.write("Summary of Residuals:")
-            st.write(pd.Series(residuals_1).describe())
+            st.write(pd.Series(current_residuals).describe())
 
             # Residual distribution
             st.subheader("Residual Distribution")
             fig, ax = plt.subplots(figsize=(6, 4))
-            ax.hist(residuals_1, bins=30, alpha=0.7)
-            ax.set_title('Residuals from 1-Step GMM')
+            ax.hist(current_residuals, bins=30, alpha=0.7)
+            ax.set_title(f'Residuals from 1-Step GMM ({gmm_method})')
             st.pyplot(fig)
 
             # g_n
-            st.subheader("g_n(δ̂¹)")
-            st.latex(matrix_to_latex(g_n, r"\mathbf{g}_n(\hat{\delta}^1)"))
+            st.subheader(f"g_n(δ̂¹_{method_name})")
+            st.latex(matrix_to_latex(current_g_n, rf"\mathbf{{g}}_n(\hat{{\delta}}^{{1}}_{{{method_name}}})"))
 
             # Compute intermediates for numerical display
-            S_xx_inv = np.linalg.inv(S_xx)
-            temp_1step = S_xz.T @ S_xx_inv @ S_xz
-            temp_1step_inv = np.linalg.inv(temp_1step)
-            inner_1step = S_xz.T @ S_xx_inv @ S_xy
+            if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+                S_xx_inv = np.linalg.inv(S_xx)
+                temp_1step = S_xz.T @ S_xx_inv @ S_xz
+                temp_1step_inv = np.linalg.inv(temp_1step)
+                inner_1step = S_xz.T @ S_xx_inv @ S_xy
+                
+                # Expanders
+                with st.expander("Formulas and Derivations"):
+                    st.markdown("**Moment Conditions:**")
+                    st.latex(r"E[x_i (y_i - z_i' \delta)] = 0")
+                    st.markdown("**Sample Moments:**")
+                    st.latex(r"\mathbf{S}_{xx} = \frac{1}{n} \sum x_i x_i'")
+                    st.latex(r"\mathbf{S}_{xz} = \frac{1}{n} \sum x_i z_i'")
+                    st.latex(r"\mathbf{S}_{xy} = \frac{1}{n} \sum x_i y_i")
+                    st.markdown("**1-Step GMM Estimator (W = S_xx⁻¹):**")
+                    st.latex(r"\hat{\delta}^{1}_{TSLS} = (\mathbf{S}_{xz}' \mathbf{S}_{xx}^{-1} \mathbf{S}_{xz})^{-1} \mathbf{S}_{xz}' \mathbf{S}_{xx}^{-1} \mathbf{S}_{xy}")
+                    st.markdown("**Residuals:**")
+                    st.latex(r"\hat{\epsilon}_i = y_i - z_i' \hat{\delta}^{1}_{TSLS}")
+                    st.markdown("**g_n(δ):**")
+                    st.latex(r"\mathbf{g}_n(\delta) = \frac{1}{n} \sum x_i (y_i - z_i' \delta)")
+                    st.markdown("**Asymptotic Variance:**")
+                    st.latex(r"V = (\mathbf{S}_{xz}' \mathbf{S}_{xx}^{-1} \mathbf{S}_{xz})^{-1} (\mathbf{S}_{xz}' \mathbf{S}_{xx}^{-1} \hat{\mathbf{S}} \mathbf{S}_{xx}^{-1} \mathbf{S}_{xz}) (\mathbf{S}_{xz}' \mathbf{S}_{xx}^{-1} \mathbf{S}_{xz})^{-1}")
+
+                    st.markdown("**Numerical Calculations:**")
+                    st.markdown("**Sample Moments:**")
+                    st.latex(matrix_to_latex(S_xx, r"\mathbf{S}_{xx}"))
+                    st.latex(matrix_to_latex(S_xz, r"\mathbf{S}_{xz}"))
+                    st.latex(matrix_to_latex(S_xy, r"\mathbf{S}_{xy}"))
+                    st.markdown("**1-Step GMM Estimator Computation:**")
+                    st.latex(rf"\mathbf{{S}}_{{xx}}^{{-1}} = {matrix_to_latex(S_xx_inv, '')}")
+                    st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xz}} = {matrix_to_latex(temp_1step, '')}")
+                    st.latex(rf"(\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xz}})^{{-1}} = {matrix_to_latex(temp_1step_inv, '')}")
+                    st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xy}} = {matrix_to_latex(inner_1step, '')}")
+                    st.latex(rf"\hat{{\delta}}^{{1}}_{{TSLS}} = {matrix_to_latex(current_delta, '')}")
+                    st.markdown("**g_n(δ̂¹_TSLS):**")
+                    st.latex(rf"\mathbf{{g}}_n(\hat{{\delta}}^{{1}}_{{TSLS}}) = {matrix_to_latex(current_g_n, '')}")
+
+                with st.expander("Explanations"):
+                    st.markdown("The 1-step GMM estimator with W = S_xx⁻¹ is equivalent to the Two-Stage Least Squares (2SLS) estimator.")
+                    st.markdown("This weighting matrix is scale-invariant and provides a natural starting point for GMM estimation.")
+                    st.markdown("The residuals represent the fitted errors, and g_n(δ̂¹_TSLS) should be close to zero if the estimator is consistent.")
+                    st.markdown("Standard errors are computed using the asymptotic variance formula that accounts for heteroskedasticity.")
+            else:  # W = I
+                temp_1step_I = S_xz.T @ S_xz
+                temp_1step_I_inv = np.linalg.inv(temp_1step_I)
+                inner_1step_I = S_xz.T @ S_xy
+                
+                # Expanders
+                with st.expander("Formulas and Derivations"):
+                    st.markdown("**Moment Conditions:**")
+                    st.latex(r"E[x_i (y_i - z_i' \delta)] = 0")
+                    st.markdown("**Sample Moments:**")
+                    st.latex(r"\mathbf{S}_{xx} = \frac{1}{n} \sum x_i x_i'")
+                    st.latex(r"\mathbf{S}_{xz} = \frac{1}{n} \sum x_i z_i'")
+                    st.latex(r"\mathbf{S}_{xy} = \frac{1}{n} \sum x_i y_i")
+                    st.markdown("**1-Step GMM Estimator (W = I):**")
+                    st.latex(r"\hat{\delta}^{1}_{I} = (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1} \mathbf{S}_{xz}' \mathbf{S}_{xy}")
+                    st.markdown("**Residuals:**")
+                    st.latex(r"\hat{\epsilon}_i = y_i - z_i' \hat{\delta}^{1}_{I}")
+                    st.markdown("**g_n(δ):**")
+                    st.latex(r"\mathbf{g}_n(\delta) = \frac{1}{n} \sum x_i (y_i - z_i' \delta)")
+                    st.markdown("**Asymptotic Variance:**")
+                    st.latex(r"V_I = (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1} (\mathbf{S}_{xz}' \hat{\mathbf{S}} \mathbf{S}_{xz}) (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1}")
+
+                    st.markdown("**Numerical Calculations:**")
+                    st.markdown("**Sample Moments:**")
+                    st.latex(matrix_to_latex(S_xx, r"\mathbf{S}_{xx}"))
+                    st.latex(matrix_to_latex(S_xz, r"\mathbf{S}_{xz}"))
+                    st.latex(matrix_to_latex(S_xy, r"\mathbf{S}_{xy}"))
+                    st.markdown("**1-Step GMM Estimator Computation:**")
+                    st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xz}} = {matrix_to_latex(temp_1step_I, '')}")
+                    st.latex(rf"(\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xz}})^{{-1}} = {matrix_to_latex(temp_1step_I_inv, '')}")
+                    st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xy}} = {matrix_to_latex(inner_1step_I, '')}")
+                    st.latex(rf"\hat{{\delta}}^{{1}}_{{I}} = {matrix_to_latex(current_delta, '')}")
+                    st.markdown("**g_n(δ̂¹_I):**")
+                    st.latex(rf"\mathbf{{g}}_n(\hat{{\delta}}^{{1}}_{{I}}) = {matrix_to_latex(current_g_n, '')}")
+
+                with st.expander("Explanations"):
+                    st.markdown("The 1-step GMM estimator with W = I (identity matrix) is a simple alternative weighting scheme.")
+                    st.markdown("This method gives equal weight to all moment conditions, unlike the TSLS equivalent which uses S_xx⁻¹.")
+                    st.markdown("The residuals represent the fitted errors, and g_n(δ̂¹_I) should be close to zero if the estimator is consistent.")
+                    st.markdown("Standard errors are computed using the appropriate asymptotic variance formula for the identity weighting matrix.")
+        else:
+            st.warning("Model is not identified. Cannot perform GMM estimation.")
+
+    with tab3:
+        if identified:
+            st.header("1-Step GMM with W = I (Identity Matrix)")
+
+            # Display moments
+            st.subheader("Sample Moments")
+            st.latex(matrix_to_latex(S_xx, r"\mathbf{S}_{xx}"))
+            st.latex(matrix_to_latex(S_xz, r"\mathbf{S}_{xz}"))
+            st.latex(matrix_to_latex(S_xy, r"\mathbf{S}_{xy}"))
+
+            st.subheader("1-Step GMM Estimator (W = I)")
+            st.latex(matrix_to_latex(delta_hat_I, r"\hat{\delta}^{1}_{I}"))
+
+            # If delta_true available, show difference
+            if delta_true is not None:
+                st.write(f"True δ: {delta_true}")
+                st.write(f"Estimation Error: {delta_hat_I - delta_true}")
+
+            # Compute standard errors
+            try:
+                V1_I = compute_asymptotic_variance_1step_identity(S_xz, S_hat)
+                se_1_I = np.sqrt(np.diag(V1_I) / n)
+                st.subheader("Standard Errors (Asymptotic)")
+                for i, se in enumerate(se_1_I):
+                    st.write(f"SE(δ_{i+1}): {se:.6f}")
+            except:
+                st.error("Failed to compute standard errors")
+
+            # Residuals
+            st.subheader("Residuals")
+            st.write("Summary of Residuals:")
+            st.write(pd.Series(residuals_1_I).describe())
+
+            # Residual distribution
+            st.subheader("Residual Distribution")
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.hist(residuals_1_I, bins=30, alpha=0.7)
+            ax.set_title('Residuals from 1-Step GMM (W = I)')
+            st.pyplot(fig)
+
+            # g_n
+            st.subheader("g_n(δ̂¹_I)")
+            st.latex(matrix_to_latex(g_n_I, r"\mathbf{g}_n(\hat{\delta}^{1}_{I})"))
+
+            # Compute intermediates for numerical display
+            temp_1step_I = S_xz.T @ S_xz
+            temp_1step_I_inv = np.linalg.inv(temp_1step_I)
+            inner_1step_I = S_xz.T @ S_xy
 
             # Expanders
             with st.expander("Formulas and Derivations"):
@@ -280,12 +486,14 @@ if x is not None:
                 st.latex(r"\mathbf{S}_{xx} = \frac{1}{n} \sum x_i x_i'")
                 st.latex(r"\mathbf{S}_{xz} = \frac{1}{n} \sum x_i z_i'")
                 st.latex(r"\mathbf{S}_{xy} = \frac{1}{n} \sum x_i y_i")
-                st.markdown("**1-Step GMM Estimator:**")
-                st.latex(r"\hat{\delta}^1 = (\mathbf{S}_{xz}' \mathbf{S}_{xx}^{-1} \mathbf{S}_{xz})^{-1} \mathbf{S}_{xz}' \mathbf{S}_{xx}^{-1} \mathbf{S}_{xy}")
+                st.markdown("**1-Step GMM Estimator (W = I):**")
+                st.latex(r"\hat{\delta}^{1}_{I} = (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1} \mathbf{S}_{xz}' \mathbf{S}_{xy}")
                 st.markdown("**Residuals:**")
-                st.latex(r"\hat{\epsilon}_i = y_i - z_i' \hat{\delta}^1")
+                st.latex(r"\hat{\epsilon}_i = y_i - z_i' \hat{\delta}^{1}_{I}")
                 st.markdown("**g_n(δ):**")
                 st.latex(r"\mathbf{g}_n(\delta) = \frac{1}{n} \sum x_i (y_i - z_i' \delta)")
+                st.markdown("**Asymptotic Variance:**")
+                st.latex(r"V_I = (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1} (\mathbf{S}_{xz}' \hat{\mathbf{S}} \mathbf{S}_{xz}) (\mathbf{S}_{xz}' \mathbf{S}_{xz})^{-1}")
 
                 st.markdown("**Numerical Calculations:**")
                 st.markdown("**Sample Moments:**")
@@ -293,22 +501,22 @@ if x is not None:
                 st.latex(matrix_to_latex(S_xz, r"\mathbf{S}_{xz}"))
                 st.latex(matrix_to_latex(S_xy, r"\mathbf{S}_{xy}"))
                 st.markdown("**1-Step GMM Estimator Computation:**")
-                st.latex(rf"\mathbf{{S}}_{{xx}}^{{-1}} = {matrix_to_latex(S_xx_inv, '')}")
-                st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xz}} = {matrix_to_latex(temp_1step, '')}")
-                st.latex(rf"(\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xz}})^{{-1}} = {matrix_to_latex(temp_1step_inv, '')}")
-                st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xx}}^{{-1}} \mathbf{{S}}_{{xy}} = {matrix_to_latex(inner_1step, '')}")
-                st.latex(rf"\hat{{\delta}}^1 = {matrix_to_latex(delta_hat, '')}")
-                st.markdown("**g_n(δ̂¹):**")
-                st.latex(rf"\mathbf{{g}}_n(\hat{{\delta}}^1) = {matrix_to_latex(g_n, '')}")
+                st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xz}} = {matrix_to_latex(temp_1step_I, '')}")
+                st.latex(rf"(\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xz}})^{{-1}} = {matrix_to_latex(temp_1step_I_inv, '')}")
+                st.latex(rf"\mathbf{{S}}_{{xz}}' \mathbf{{S}}_{{xy}} = {matrix_to_latex(inner_1step_I, '')}")
+                st.latex(rf"\hat{{\delta}}^{{1}}_{{I}} = {matrix_to_latex(delta_hat_I, '')}")
+                st.markdown("**g_n(δ̂¹_I):**")
+                st.latex(rf"\mathbf{{g}}_n(\hat{{\delta}}^{{1}}_{{I}}) = {matrix_to_latex(g_n_I, '')}")
 
             with st.expander("Explanations"):
-                st.markdown("The 1-step GMM estimator uses the inverse of the instrument covariance matrix as weights (W = S_xx⁻¹).")
-                st.markdown("This makes it equivalent to the Two-Stage Least Squares (2SLS) estimator, which is scale-invariant.")
-                st.markdown("The residuals represent the fitted errors, and g_n(δ̂¹) should be close to zero if the estimator is consistent.")
+                st.markdown("The 1-step GMM estimator with W = I (identity matrix) is a simple alternative weighting scheme.")
+                st.markdown("This method gives equal weight to all moment conditions, unlike the TSLS equivalent which uses S_xx⁻¹.")
+                st.markdown("The residuals represent the fitted errors, and g_n(δ̂¹_I) should be close to zero if the estimator is consistent.")
+                st.markdown("Standard errors are computed using the appropriate asymptotic variance formula for the identity weighting matrix.")
         else:
             st.warning("Model is not identified. Cannot perform GMM estimation.")
 
-    with tab3:
+    with tab4:
         if identified:
             st.header("2-Step GMM Estimation")
 
@@ -396,7 +604,8 @@ if x is not None:
             st.header("Comparison & Hansen J-Test")
 
             # Run M simulations
-            delta_hats_1 = []
+            delta_hats_1 = []  # W = S_xx^-1
+            delta_hats_1_I = []  # W = I
             delta_hats_2 = []
             J2s = []
             p_values = []
@@ -408,9 +617,17 @@ if x is not None:
                 # Compute moments
                 S_xx_sim, S_xz_sim, S_xy_sim = compute_sample_moments(x_sim, z_sim, y_sim)
 
-                # 1-step
-                delta_hat_1_sim = compute_gmm_1step(S_xx_sim, S_xz_sim, S_xy_sim)
-                delta_hats_1.append(delta_hat_1_sim)
+                # Compute only the selected 1-step method
+                if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
+                    delta_hat_1_sim = compute_gmm_1step(S_xx_sim, S_xz_sim, S_xy_sim)
+                    delta_hats_1.append(delta_hat_1_sim)
+                    delta_hat_1_I_sim = compute_gmm_1step_identity(S_xz_sim, S_xy_sim)  # For comparison
+                    delta_hats_1_I.append(delta_hat_1_I_sim)
+                else:  # W = I
+                    delta_hat_1_I_sim = compute_gmm_1step_identity(S_xz_sim, S_xy_sim)
+                    delta_hats_1_I.append(delta_hat_1_I_sim)
+                    delta_hat_1_sim = compute_gmm_1step(S_xx_sim, S_xz_sim, S_xy_sim)  # For comparison
+                    delta_hats_1.append(delta_hat_1_sim)
 
                 # Residuals 1
                 residuals_1_sim = compute_residuals(z_sim, y_sim, delta_hat_1_sim)
@@ -457,28 +674,40 @@ if x is not None:
                     p_values.append(np.nan)
 
             # Convert to arrays
-            delta_hats_1 = np.array(delta_hats_1)
+            delta_hats_1 = np.array(delta_hats_1)  # W = S_xx^-1
+            delta_hats_1_I = np.array(delta_hats_1_I)  # W = I
             delta_hats_2 = np.array(delta_hats_2)
             J2s = np.array(J2s)
             p_values = np.array(p_values)
 
             # Compute averages, biases, SEs
+            # W = S_xx^-1 method
             avg_delta_1 = np.mean(delta_hats_1, axis=0)
             bias_1 = avg_delta_1 - delta_true
             se_1 = np.std(delta_hats_1, axis=0, ddof=1)
+            
+            # W = I method
+            avg_delta_1_I = np.mean(delta_hats_1_I, axis=0)
+            bias_1_I = avg_delta_1_I - delta_true
+            se_1_I = np.std(delta_hats_1_I, axis=0, ddof=1)
 
             avg_delta_2 = np.nanmean(delta_hats_2, axis=0)
             bias_2 = avg_delta_2 - delta_true
             se_2 = np.nanstd(delta_hats_2, axis=0, ddof=1)
 
             # Asymptotic variances (from one simulation, say the last)
-            # Asymptotic variances (from one simulation, say the last)
             S_xx_asym, S_xz_asym, S_xy_asym = compute_sample_moments(x, z, y)
             delta_hat_1_asym = compute_gmm_1step(S_xx_asym, S_xz_asym, S_xy_asym)
+            delta_hat_1_I_asym = compute_gmm_1step_identity(S_xz_asym, S_xy_asym)
             residuals_1_asym = compute_residuals(z, y, delta_hat_1_asym)
             S_hat_asym = compute_S_hat(residuals_1_asym, x)
+            
+            # Asymptotic standard errors for both 1-step methods
             V1 = compute_asymptotic_variance_1step(S_xx_asym, S_xz_asym, S_hat_asym)
             asym_se_1 = np.sqrt(np.diag(V1) / n)
+            
+            V1_I = compute_asymptotic_variance_1step_identity(S_xz_asym, S_hat_asym)
+            asym_se_1_I = np.sqrt(np.diag(V1_I) / n)
 
             if inversion_success:
                 V2 = compute_asymptotic_variance_2step(S_xz_asym, W2, S_hat_asym)
@@ -486,8 +715,8 @@ if x is not None:
             else:
                 asym_se_2 = np.full(L, np.nan)
 
-            # 1-Step GMM Results Table
-            st.subheader("1-Step GMM Results")
+            # 1-Step GMM Results Tables
+            st.subheader("1-Step GMM Results (W = S_xx⁻¹)")
             one_step_data = []
             for j in range(L):
                 one_step_data.append({
@@ -500,6 +729,20 @@ if x is not None:
                 })
             df_one_step = pd.DataFrame(one_step_data)
             st.dataframe(df_one_step)
+            
+            st.subheader("1-Step GMM Results (W = I)")
+            one_step_I_data = []
+            for j in range(L):
+                one_step_I_data.append({
+                    "Parameter": f"δ_{j+1}",
+                    "Estimated": avg_delta_1_I[j],
+                    "True Value": delta_true[j],
+                    "Bias": bias_1_I[j],
+                    "SE (Emp)": se_1_I[j],
+                    "SE (Asym)": asym_se_1_I[j]
+                })
+            df_one_step_I = pd.DataFrame(one_step_I_data)
+            st.dataframe(df_one_step_I)
 
             # 2-Step GMM Results Table
             st.subheader("2-Step GMM Results")
@@ -517,17 +760,35 @@ if x is not None:
             st.dataframe(df_two_step)
 
             # Direct Comparison Table
-            st.subheader("Direct Comparison: Bias and Efficiency")
+            st.subheader("Direct Comparison: All Methods")
             comparison_data = []
             for j in range(L):
-                bias_diff = bias_2[j] - bias_1[j]
-                eff_gain_emp = ((se_1[j] / se_2[j]) - 1) * 100 if se_2[j] != 0 else np.nan
-                eff_gain_asym = ((asym_se_1[j] / asym_se_2[j]) - 1) * 100 if asym_se_2[j] != 0 else np.nan
+                # Compare 2-step vs W=S_xx^-1
+                bias_diff_2_vs_1 = bias_2[j] - bias_1[j]
+                eff_gain_2_vs_1_emp = ((se_1[j] / se_2[j]) - 1) * 100 if se_2[j] != 0 else np.nan
+                eff_gain_2_vs_1_asym = ((asym_se_1[j] / asym_se_2[j]) - 1) * 100 if asym_se_2[j] != 0 else np.nan
+                
+                # Compare 2-step vs W=I
+                bias_diff_2_vs_I = bias_2[j] - bias_1_I[j]
+                eff_gain_2_vs_I_emp = ((se_1_I[j] / se_2[j]) - 1) * 100 if se_2[j] != 0 else np.nan
+                eff_gain_2_vs_I_asym = ((asym_se_1_I[j] / asym_se_2[j]) - 1) * 100 if asym_se_2[j] != 0 else np.nan
+                
+                # Compare W=S_xx^-1 vs W=I
+                bias_diff_1_vs_I = bias_1_I[j] - bias_1[j]
+                eff_gain_1_vs_I_emp = ((se_1[j] / se_1_I[j]) - 1) * 100 if se_1_I[j] != 0 else np.nan
+                eff_gain_1_vs_I_asym = ((asym_se_1[j] / asym_se_1_I[j]) - 1) * 100 if asym_se_1_I[j] != 0 else np.nan
+                
                 comparison_data.append({
                     "Parameter": f"δ_{j+1}",
-                    "Bias Difference\n(2-Step - 1-Step)": bias_diff,
-                    "Efficiency Gain\n(Emp) (%)": eff_gain_emp,
-                    "Efficiency Gain\n(Asym) (%)": eff_gain_asym
+                    "Bias: 2-Step vs W=S_xx⁻¹": bias_diff_2_vs_1,
+                    "Bias: 2-Step vs W=I": bias_diff_2_vs_I,
+                    "Bias: W=S_xx⁻¹ vs W=I": bias_diff_1_vs_I,
+                    "Eff Gain: 2-Step vs W=S_xx⁻¹ (Emp %)": eff_gain_2_vs_1_emp,
+                    "Eff Gain: 2-Step vs W=I (Emp %)": eff_gain_2_vs_I_emp,
+                    "Eff Gain: W=S_xx⁻¹ vs W=I (Emp %)": eff_gain_1_vs_I_emp,
+                    "Eff Gain: 2-Step vs W=S_xx⁻¹ (Asym %)": eff_gain_2_vs_1_asym,
+                    "Eff Gain: 2-Step vs W=I (Asym %)": eff_gain_2_vs_I_asym,
+                    "Eff Gain: W=S_xx⁻¹ vs W=I (Asym %)": eff_gain_1_vs_I_asym
                 })
             df_comparison = pd.DataFrame(comparison_data)
             st.dataframe(df_comparison)
@@ -561,15 +822,46 @@ if x is not None:
 
             # Plots
             st.subheader("Plots")
-            fig, axes = plt.subplots(1, L, figsize=(5*L, 4))
+            fig, axes = plt.subplots(1, L, figsize=(6*L, 4))
             if L == 1:
                 axes = [axes]
             for j in range(L):
-                axes[j].hist(delta_hats_1[:, j], alpha=0.5, label='1-Step', bins=30)
-                axes[j].hist(delta_hats_2[:, j], alpha=0.5, label='2-Step', bins=30)
-                axes[j].axvline(delta_true[j], color='red', linestyle='--', label='True')
+                axes[j].hist(delta_hats_1[:, j], alpha=0.4, label='1-Step (W=S_xx⁻¹)', bins=30, color='blue')
+                axes[j].hist(delta_hats_1_I[:, j], alpha=0.4, label='1-Step (W=I)', bins=30, color='green')
+                axes[j].hist(delta_hats_2[:, j], alpha=0.4, label='2-Step', bins=30, color='orange')
+                axes[j].axvline(delta_true[j], color='red', linestyle='--', linewidth=2, label='True')
                 axes[j].set_title(f'δ_{j+1}')
                 axes[j].legend()
             st.pyplot(fig)
         else:
             st.warning("Comparison requires generated data with true parameters and identified model.")
+
+                axes[j].hist(delta_hats_1_I[:, j], alpha=0.4, label='1-Step (W=I)', bins=30, color='green')
+                axes[j].hist(delta_hats_2[:, j], alpha=0.4, label='2-Step', bins=30, color='orange')
+                axes[j].axvline(delta_true[j], color='red', linestyle='--', linewidth=2, label='True')
+                axes[j].set_title(f'δ_{j+1}')
+                axes[j].legend()
+            st.pyplot(fig)
+        else:
+            st.warning("Comparison requires generated data with true parameters and identified model.")
+
+
+                axes[j].legend()
+            st.pyplot(fig)
+        else:
+            st.warning("Comparison requires generated data with true parameters and identified model.")
+                axes[j].hist(delta_hats_1_I[:, j], alpha=0.4, label='1-Step (W=I)', bins=30, color='green')
+                axes[j].hist(delta_hats_2[:, j], alpha=0.4, label='2-Step', bins=30, color='orange')
+                axes[j].axvline(delta_true[j], color='red', linestyle='--', linewidth=2, label='True')
+                axes[j].set_title(f'δ_{j+1}')
+                axes[j].legend()
+            st.pyplot(fig)
+        else:
+            st.warning("Comparison requires generated data with true parameters and identified model.")                axes[j].hist(delta_hats_2[:, j], alpha=0.4, label='2-Step', bins=30, color='orange')
+                axes[j].axvline(delta_true[j], color='red', linestyle='--', linewidth=2, label='True')
+                axes[j].set_title(f'δ_{j+1}')
+                axes[j].legend()
+            st.pyplot(fig)
+        else:
+            st.warning("Comparison requires generated data with true parameters and identified model.")
+

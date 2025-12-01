@@ -24,6 +24,7 @@ This project provides an interactive Streamlit application that demonstrates GMM
    - Homoskedastic
    - Heteroskedastic (Linear/Quadratic/Exponential)
    - High/Low Endogeneity
+   - Invalid Instruments (Not Exogenous)
 4. **Analysis**: Explore the four main tabs:
    - Data & DGP: Summary statistics and data visualization
    - 1-Step GMM: Two-stage least squares equivalent estimation
@@ -48,3 +49,38 @@ This project provides an interactive Streamlit application that demonstrates GMM
 - Pandas
 
 Perfect for students and researchers learning econometric methods!
+Perfect for students and researchers learning econometric methods!
+- SciPy
+- Matplotlib
+- Pandas
+
+Perfect for students and researchers learning econometric methods!Perfect for students and researchers learning econometric methods!
+
+Perfect for students and researchers learning econometric methods!Perfect for students and researchers learning econometric methods!
+
+- Matplotlib
+- Pandas
+
+Perfect for students and researchers learning econometric methods!Perfect for students and researchers learning econometric methods!
+
+Perfect for students and researchers learning econometric methods!Perfect for students and researchers learning econometric methods!
+
+
+- NumPy
+- SciPy
+- Matplotlib
+- Pandas
+
+Perfect for students and researchers learning econometric methods!Perfect for students and researchers learning econometric methods!
+
+Perfect for students and researchers learning econometric methods!Perfect for students and researchers learning econometric methods!
+
+- Matplotlib
+- Pandas
+
+Perfect for students and researchers learning econometric methods!Perfect for students and researchers learning econometric methods!
+
+Perfect for students and researchers learning econometric methods!Perfect for students and researchers learning econometric methods!
+
+
+
