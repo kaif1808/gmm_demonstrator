@@ -835,33 +835,3 @@ if x is not None:
             st.pyplot(fig)
         else:
             st.warning("Comparison requires generated data with true parameters and identified model.")
-
-                axes[j].hist(delta_hats_1_I[:, j], alpha=0.4, label='1-Step (W=I)', bins=30, color='green')
-                axes[j].hist(delta_hats_2[:, j], alpha=0.4, label='2-Step', bins=30, color='orange')
-                axes[j].axvline(delta_true[j], color='red', linestyle='--', linewidth=2, label='True')
-                axes[j].set_title(f'δ_{j+1}')
-                axes[j].legend()
-            st.pyplot(fig)
-        else:
-            st.warning("Comparison requires generated data with true parameters and identified model.")
-
-
-                axes[j].legend()
-            st.pyplot(fig)
-        else:
-            st.warning("Comparison requires generated data with true parameters and identified model.")
-                axes[j].hist(delta_hats_1_I[:, j], alpha=0.4, label='1-Step (W=I)', bins=30, color='green')
-                axes[j].hist(delta_hats_2[:, j], alpha=0.4, label='2-Step', bins=30, color='orange')
-                axes[j].axvline(delta_true[j], color='red', linestyle='--', linewidth=2, label='True')
-                axes[j].set_title(f'δ_{j+1}')
-                axes[j].legend()
-            st.pyplot(fig)
-        else:
-            st.warning("Comparison requires generated data with true parameters and identified model.")                axes[j].hist(delta_hats_2[:, j], alpha=0.4, label='2-Step', bins=30, color='orange')
-                axes[j].axvline(delta_true[j], color='red', linestyle='--', linewidth=2, label='True')
-                axes[j].set_title(f'δ_{j+1}')
-                axes[j].legend()
-            st.pyplot(fig)
-        else:
-            st.warning("Comparison requires generated data with true parameters and identified model.")
-
