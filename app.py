@@ -150,27 +150,34 @@ else:
 if x is not None:
     identified, rank = check_identification(x, z, L)
 
-    # Pre-compute GMM estimates if identified
+    # Pre-compute GMM estimates if identified using optimized functions
     if identified:
-        S_xx, S_xz, S_xy = compute_sample_moments(x, z, y)
-        
-        # Compute only the selected 1-step GMM method
+        S_xx, S_xz, S_xy = compute_sample_moments_optimized(x, z, y)
+
+        # Compute only the selected 1-step GMM method using optimized versions
         if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
-            delta_hat = compute_gmm_1step(S_xx, S_xz, S_xy)
+            delta_hat = compute_gmm_1step_optimized(S_xx, S_xz, S_xy)
             residuals_1 = compute_residuals(z, y, delta_hat)
             g_n = compute_g_n(x, residuals_1)
-            S_hat = compute_S_hat(residuals_1, x)
+            S_hat = compute_S_hat_optimized(residuals_1, x)
             delta_hat_I = residuals_1_I = g_n_I = None
         else:  # W = I
-            delta_hat_I = compute_gmm_1step_identity(S_xz, S_xy)
+            delta_hat_I = compute_gmm_1step_identity_optimized(S_xz, S_xy)
             residuals_1_I = compute_residuals(z, y, delta_hat_I)
             g_n_I = compute_g_n(x, residuals_1_I)
             # Note: For 2-step GMM, we still need S_hat from the W=S_xx^{-1} method
             # as it's the conventional approach
-            delta_hat_temp = compute_gmm_1step(S_xx, S_xz, S_xy)
+            delta_hat_temp = compute_gmm_1step_optimized(S_xx, S_xz, S_xy)
             residuals_temp = compute_residuals(z, y, delta_hat_temp)
-            S_hat = compute_S_hat(residuals_temp, x)
+            S_hat = compute_S_hat_optimized(residuals_temp, x)
             delta_hat = residuals_1 = g_n = None
+
+        # Ensure delta_hat_I is always computed for tab3 using optimized version
+        if delta_hat_I is None:
+            delta_hat_I = compute_gmm_1step_identity_optimized(S_xz, S_xy)
+            residuals_1_I = compute_residuals(z, y, delta_hat_I)
+            g_n_I = compute_g_n(x, residuals_1_I)
+
         try:
             W2 = np.linalg.inv(S_hat)
             inversion_success = True
@@ -275,20 +282,20 @@ if x is not None:
             # Select the appropriate method based on user choice
             if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
                 if delta_hat is None:
-                    # Compute on demand if not already computed
-                    delta_hat = compute_gmm_1step(S_xx, S_xz, S_xy)
+                    # Compute on demand if not already computed using optimized functions
+                    delta_hat = compute_gmm_1step_optimized(S_xx, S_xz, S_xy)
                     residuals_1 = compute_residuals(z, y, delta_hat)
                     g_n = compute_g_n(x, residuals_1)
-                    S_hat = compute_S_hat(residuals_1, x)
-                
+                    S_hat = compute_S_hat_optimized(residuals_1, x)
+
                 current_delta = delta_hat
                 current_residuals = residuals_1
                 current_g_n = g_n
                 method_name = "TSLS"
-                
-                # Compute standard errors
+
+                # Compute standard errors using optimized version
                 try:
-                    V1 = compute_asymptotic_variance_1step(S_xx, S_xz, S_hat)
+                    V1 = compute_asymptotic_variance_1step_optimized(S_xx, S_xz, S_hat)
                     se_1 = np.sqrt(np.diag(V1) / n)
                     st.subheader("Standard Errors (Asymptotic)")
                     for i, se in enumerate(se_1):
@@ -298,19 +305,19 @@ if x is not None:
                     se_1 = None
             else:  # W = I
                 if delta_hat_I is None:
-                    # Compute on demand if not already computed
-                    delta_hat_I = compute_gmm_1step_identity(S_xz, S_xy)
+                    # Compute on demand if not already computed using optimized function
+                    delta_hat_I = compute_gmm_1step_identity_optimized(S_xz, S_xy)
                     residuals_1_I = compute_residuals(z, y, delta_hat_I)
                     g_n_I = compute_g_n(x, residuals_1_I)
-                
+
                 current_delta = delta_hat_I
                 current_residuals = residuals_1_I
                 current_g_n = g_n_I
                 method_name = "I"
-                
-                # Compute standard errors
+
+                # Compute standard errors using optimized version
                 try:
-                    V1_I = compute_asymptotic_variance_1step_identity(S_xz, S_hat)
+                    V1_I = compute_asymptotic_variance_1step_identity_optimized(S_xz, S_hat)
                     se_1_I = np.sqrt(np.diag(V1_I) / n)
                     st.subheader("Standard Errors (Asymptotic)")
                     for i, se in enumerate(se_1_I):
@@ -447,9 +454,9 @@ if x is not None:
                 st.write(f"True δ: {delta_true}")
                 st.write(f"Estimation Error: {delta_hat_I - delta_true}")
 
-            # Compute standard errors
+            # Compute standard errors using optimized version
             try:
-                V1_I = compute_asymptotic_variance_1step_identity(S_xz, S_hat)
+                V1_I = compute_asymptotic_variance_1step_identity_optimized(S_xz, S_hat)
                 se_1_I = np.sqrt(np.diag(V1_I) / n)
                 st.subheader("Standard Errors (Asymptotic)")
                 for i, se in enumerate(se_1_I):
@@ -603,41 +610,64 @@ if x is not None:
         if data_option == "Generate" and delta_true is not None and identified:
             st.header("Comparison & Hansen J-Test")
 
-            # Run M simulations
+            # Initialize GMMOptimizer for performance monitoring
+            optimizer = GMMOptimizer()
+
+            # Run M simulations with optimized functions and batch processing
             delta_hats_1 = []  # W = S_xx^-1
             delta_hats_1_I = []  # W = I
             delta_hats_2 = []
             J2s = []
             p_values = []
 
+            # Collect data for batch processing of 1-step estimates
+            X_batches = []
+            Z_batches = []
+            Y_batches = []
+
             for m in range(M):
                 # Generate new data with same parameters but different seed
                 x_sim, z_sim, y_sim, _ = generate_data(K, L, n, seed + m + 1, delta_true, dgp_type=dgp_type, hetero_level=hetero_level)
 
-                # Compute moments
-                S_xx_sim, S_xz_sim, S_xy_sim = compute_sample_moments(x_sim, z_sim, y_sim)
+                # Collect for batch processing
+                X_batches.append(x_sim)
+                Z_batches.append(z_sim)
+                Y_batches.append(y_sim)
 
-                # Compute only the selected 1-step method
+            # Batch compute 1-step GMM estimates for efficiency
+            batch_results = batch_gmm_estimates(X_batches, Z_batches, Y_batches, method='both')
+            delta_hats_1_batch = batch_results['tsls']
+            delta_hats_1_I_batch = batch_results['identity']
+
+            for m in range(M):
+                x_sim, z_sim, y_sim = X_batches[m], Z_batches[m], Y_batches[m]
+
+                # Get pre-computed estimates from batch
+                delta_hat_1_sim = delta_hats_1_batch[m]
+                delta_hat_1_I_sim = delta_hats_1_I_batch[m]
+
+                # Compute moments using optimized version
+                S_xx_sim, S_xz_sim, S_xy_sim = compute_sample_moments_optimized(x_sim, z_sim, y_sim)
+
+                # Select the appropriate method based on user choice
                 if gmm_method == "W = S_xx⁻¹ (TSLS Equivalent)":
-                    delta_hat_1_sim = compute_gmm_1step(S_xx_sim, S_xz_sim, S_xy_sim)
                     delta_hats_1.append(delta_hat_1_sim)
-                    delta_hat_1_I_sim = compute_gmm_1step_identity(S_xz_sim, S_xy_sim)  # For comparison
                     delta_hats_1_I.append(delta_hat_1_I_sim)
+                    delta_hat_1_selected = delta_hat_1_sim
                 else:  # W = I
-                    delta_hat_1_I_sim = compute_gmm_1step_identity(S_xz_sim, S_xy_sim)
                     delta_hats_1_I.append(delta_hat_1_I_sim)
-                    delta_hat_1_sim = compute_gmm_1step(S_xx_sim, S_xz_sim, S_xy_sim)  # For comparison
                     delta_hats_1.append(delta_hat_1_sim)
+                    delta_hat_1_selected = delta_hat_1_I_sim
 
-                # Residuals 1
-                residuals_1_sim = compute_residuals(z_sim, y_sim, delta_hat_1_sim)
+                # Residuals 1 using optimized computation
+                residuals_1_sim = compute_residuals(z_sim, y_sim, delta_hat_1_selected)
 
-                # S_hat
-                S_hat_sim = compute_S_hat(residuals_1_sim, x_sim)
+                # S_hat using optimized version
+                S_hat_sim = compute_S_hat_optimized(residuals_1_sim, x_sim)
 
-                # W2
+                # W2 using optimized inverse
                 try:
-                    W2_sim = np.linalg.inv(S_hat_sim)
+                    W2_sim = optimizer.get_optimized_inverse(S_hat_sim)
                     inversion_success_sim = True
                 except np.linalg.LinAlgError:
                     inversion_success_sim = False
@@ -695,18 +725,20 @@ if x is not None:
             bias_2 = avg_delta_2 - delta_true
             se_2 = np.nanstd(delta_hats_2, axis=0, ddof=1)
 
-            # Asymptotic variances (from one simulation, say the last)
-            S_xx_asym, S_xz_asym, S_xy_asym = compute_sample_moments(x, z, y)
-            delta_hat_1_asym = compute_gmm_1step(S_xx_asym, S_xz_asym, S_xy_asym)
-            delta_hat_1_I_asym = compute_gmm_1step_identity(S_xz_asym, S_xy_asym)
+            # Asymptotic variances (from one simulation, say the last) using optimized functions
+            S_xx_asym, S_xz_asym, S_xy_asym = compute_sample_moments_optimized(x, z, y)
+            delta_hat_1_asym = compute_gmm_1step_optimized(S_xx_asym, S_xz_asym, S_xy_asym)
+            delta_hat_1_I_asym = compute_gmm_1step_identity_optimized(S_xz_asym, S_xy_asym)
             residuals_1_asym = compute_residuals(z, y, delta_hat_1_asym)
-            S_hat_asym = compute_S_hat(residuals_1_asym, x)
-            
-            # Asymptotic standard errors for both 1-step methods
-            V1 = compute_asymptotic_variance_1step(S_xx_asym, S_xz_asym, S_hat_asym)
+            S_hat_asym = compute_S_hat_optimized(residuals_1_asym, x)
+            residuals_1_I_asym = compute_residuals(z, y, delta_hat_1_I_asym)
+            S_hat_I_asym = compute_S_hat_optimized(residuals_1_I_asym, x)
+
+            # Asymptotic standard errors for both 1-step methods using optimized versions
+            V1 = compute_asymptotic_variance_1step_optimized(S_xx_asym, S_xz_asym, S_hat_asym)
             asym_se_1 = np.sqrt(np.diag(V1) / n)
-            
-            V1_I = compute_asymptotic_variance_1step_identity(S_xz_asym, S_hat_asym)
+
+            V1_I = compute_asymptotic_variance_1step_identity_optimized(S_xz_asym, S_hat_I_asym)
             asym_se_1_I = np.sqrt(np.diag(V1_I) / n)
 
             if inversion_success:
