@@ -605,8 +605,7 @@ def compute_vectorized_2step(S_xx, S_xz, S_xy, residuals_1, x):
     g_n = S_xy - np.einsum('mkl,ml->mk', S_xz, delta_2_all)
 
     # J2 = n * g_n.T @ W2 @ g_n: (M,)
-    g_n_W2 = np.matmul(g_n, W2)  # g_n @ W2: (M, K)
-    J2_all = n * np.sum(g_n_W2 * g_n, axis=1)
+    J2_all = n * np.einsum('mi,mij,mj->m', g_n, W2, g_n)
 
     # p_values
     df = K - L
